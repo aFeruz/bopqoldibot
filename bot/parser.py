@@ -5,6 +5,7 @@ Sof funksiyalar: bazaga ham, Telegramga ham bog'liq emas, shuning uchun to'liq t
 
 import re
 from dataclasses import dataclass, field
+from dataclasses import field as dc_field  # Intent ichida "field" maydoni bor
 from datetime import date, datetime, timedelta
 
 # --- normalizatsiya -------------------------------------------------------
@@ -61,6 +62,7 @@ class Intent:
     value: object = None
     rule: str | None = None  # takroriy: daily / workdays / weekly:N / monthly:N
     remind: bool = False  # mas'ulga eslatib turish
+    smalltalk: list[str] = dc_field(default_factory=list)  # gap boshidagi: greet / thanks / fine / how
 
 
 # --- yordamchi parserlar ----------------------------------------------------
@@ -355,7 +357,12 @@ THANKS_RE = re.compile(
 )
 HOW_RE = re.compile(
     r"^(?:qalaysan\w*|qalaysiz|qalesan|yaxshimisan\w*|yaxshimisiz|ishlar qalay|ahvol\w*|nima gap|kak dela|"
-    r"qandaysan|qandaysiz|charchamadingmi|tinchmisan|tinchmi)"
+    r"qandaysan|qandaysiz|charchamadingmi|tinchmisan|tinchmi|o'zingiz\w*(?:-?chi)?|o'zing\w*(?:-?chi)?|siz-?chi|"
+    r"sen-?chi|sizda nima gap|o'zingda nima gap)"
+)
+FINE_RE = re.compile(
+    r"^(?:men ham |o'zim ham |hammasi |ishlar |biz ham )?(?:yaxshi|yaxshiman|yaxshimiz|zo'r|zor|a'lo|alo|joyida|"
+    r"yomon emas|chakki emas|alhamdulillah\w*|shukr\w*|normalno|norm|xorosho|otlichno|tinch|tinchlik)\b"
 )
 BYE_RE = re.compile(r"^(?:xayr|hayr|ko'rishguncha|poka|yaxshi qoling|xayrli tun|hayrli tun|good night|bye)\b")
 ABOUT_RE = re.compile(r"^(?:sen kimsan|kimsan|isming nima|o'zing haqingda|sen nima qilasan)")
@@ -513,21 +520,65 @@ def _tag(text: str) -> str | None:
     return tags[0] if tags else None
 
 
-def parse(raw: str, now: datetime | None = None) -> Intent:  # noqa: C901
-    """Gap boshidagi salomlashishni ajratib, qolganini tahlil qiladi.
+SMALLTALK_RES = [("thanks", THANKS_RE), ("fine", FINE_RE), ("how", HOW_RE)]
+
+
+def _smalltalk_at(low: str) -> tuple[str, int, str | None] | None:
+    g = GREET_RE.match(low)
+    if g:
+        return "greet", g.end(), g.lastgroup
+    for kind, rx in SMALLTALK_RES:
+        m = rx.match(low)
+        if m:
+            return kind, m.end(), None
+    return None
+
+
+def _consume_smalltalk(text: str) -> tuple[list[str], str | None, str]:
+    """Gap boshidagi salom/rahmat/hol-ahvolni ketma-ket ajratadi.
+
+    "rahmat yaxshi, Assalomu alaykum, nima bor bugunga?" -> (["thanks", "fine", "greet"], "salam", "nima bor bugunga")
+    Bo'lak faqat undan keyin tinish belgisi, gap oxiri yoki yana suhbat so'zi kelsa ajratiladi:
+    "zo'r ish qildik" o'zgarishsiz qoladi.
+    """
+    kinds: list[str] = []
+    greeting = None
+    while text:
+        found = _smalltalk_at(text.lower())
+        if not found:
+            break
+        kind, end, g = found
+        rest = text[end:]
+        nxt = rest.lstrip()
+        boundary = not nxt or nxt[0] in ",.!?;" or _smalltalk_at(nxt.lower()) is not None
+        if kind != "greet" and not boundary:
+            break
+        kinds.append(kind)
+        greeting = greeting or g
+        text = _strip_fillers(rest.strip(" ,.!?;"))
+    return kinds, greeting, text
+
+
+def parse(raw: str, now: datetime | None = None) -> Intent:
+    """Gap boshidagi suhbat qismini (salom, rahmat, hol-ahvol) ajratib, qolganini tahlil qiladi.
 
     "Assalomu alaykum" -> greet; "Assalomu alaykum, ro'yxatni ber" -> list (greeting="salam").
     """
     text = _strip_fillers(normalize(raw))
-    g = GREET_RE.match(text.lower())
-    if not g:
+    kinds, greeting, rest = _consume_smalltalk(text)
+    if not kinds:
         return _parse(text, now)
-    kind = g.lastgroup
-    rest = _strip_fillers(text[g.end():].strip())
-    if not rest or THANKS_RE.match(rest.lower()) or HOW_RE.match(rest.lower()):
-        return Intent("greet", greeting=kind)
+    if not rest:
+        if greeting:
+            return Intent("greet", greeting=greeting, smalltalk=kinds)
+        if "how" in kinds:
+            return Intent("howareyou", smalltalk=kinds)
+        if "fine" in kinds:
+            return Intent("fine", smalltalk=kinds)
+        return Intent("thanks", smalltalk=kinds)
     intent = _parse(rest, now)
-    intent.greeting = kind
+    intent.greeting = greeting
+    intent.smalltalk = kinds
     return intent
 
 
@@ -729,7 +780,12 @@ def _parse(text: str, now: datetime | None = None) -> Intent:
     if re.match(r"^(eksport\w*|export|yuklab ber\w*|excel\w*|csv|faylga|fayl qilib ber|skachat|vigruzka)", low):
         return Intent("export")
 
-    if re.match(r"^(?:ertalabki reja|kun rejasi|bugungi reja|bugungi plan|agenda|reja|rejalar|bugun nima qilamiz)\b", low):
+    if re.match(
+        r"^(?:ertalabki reja|kun rejasi|bugungi reja|bugungi plan|agenda|reja|rejalar|bugun nima qilamiz|"
+        r"nima bor bugun\w*|bugun\w* nima bor|bugun\w* nima ish\w* bor|nima ishlar bor bugun\w*|nima bor$|"
+        r"nima yangilik\w*|bugun nima qilishimiz kerak|bugun nima qilish kerak|bugunga nima)",
+        low,
+    ):
         return Intent("agenda")
 
     # --- mas'ul bo'yicha ro'yxat: "mening ishlarim", "@ali ishlari" ---

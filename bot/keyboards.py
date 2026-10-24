@@ -128,3 +128,10 @@ def import_done(batch: str) -> InlineKeyboardMarkup:
 def assignee_digest(clients) -> InlineKeyboardMarkup | None:
     btns = [B(text=f"✔️ {c.name[:18]}", callback_data=f"cq:{c.number}") for c in clients[:10]]
     return InlineKeyboardMarkup(inline_keyboard=_rows(btns, 2)) if btns else None
+
+
+def save_offer(token: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        B(text="📝 Ha, yozib qo'y", callback_data=f"ns:{token}"),
+        B(text="✖️ Yo'q", callback_data=f"nn:{token}"),
+    ]])

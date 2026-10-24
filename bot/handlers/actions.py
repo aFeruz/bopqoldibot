@@ -147,11 +147,28 @@ async def _resolve_latest(session: AsyncSession, chat_id: int, intent: Intent) -
 
 async def execute(intent: Intent, msg: Message, session: AsyncSession, bot_username: str) -> list[Reply]:
     replies = await _execute(intent, msg, session, bot_username)
-    if intent.greeting and intent.kind != "greet" and replies:
-        # "Assalomu alaykum, ro'yxatni ber" — avval alik, keyin ish
+    prefix = smalltalk_prefix(intent, first_name(msg))
+    if prefix and replies:
+        # "rahmat yaxshi, Assalomu alaykum, ro'yxatni ber" — avval suhbatga javob, keyin ish
         first = replies[0]
-        replies[0] = Reply(f"{greet_prefix(intent.greeting, first_name(msg))}\n{first.text}", first.markup)
+        replies[0] = Reply(f"{prefix}\n{first.text}", first.markup)
     return replies
+
+
+def smalltalk_prefix(intent: Intent, user: str | None) -> str:
+    """Gap boshidagi suhbat qismiga qisqa javob (asosiy javob o'zi shu turda bo'lsa — takrorlamaymiz)."""
+    own = {"greet": "greet", "thanks": "thanks", "fine": "fine", "howareyou": "how"}.get(intent.kind)
+    parts = []
+    kinds = intent.smalltalk or (["greet"] if intent.greeting else [])
+    if "greet" in kinds and own != "greet":
+        parts.append(greet_prefix(intent.greeting, user))
+    if "fine" in kinds and own != "fine":
+        parts.append(say("fine_short", user))
+    elif "thanks" in kinds and own not in ("thanks", "fine"):
+        parts.append(say("thanks_short", user))
+    if "how" in kinds and own not in ("how", "greet"):
+        parts.append(say("how_short", user))
+    return " ".join(parts)
 
 
 async def _execute(intent: Intent, msg: Message, session: AsyncSession, bot_username: str) -> list[Reply]:
@@ -164,8 +181,11 @@ async def _execute(intent: Intent, msg: Message, session: AsyncSession, bot_user
     if k == "help":
         return [Reply(texts.HELP.format(u=bot_username))]
     if k == "greet":
-        return [Reply(greet(intent.greeting, name))]
-    if k in ("thanks", "bye", "howareyou", "about"):
+        text = greet(intent.greeting, name)
+        if "how" in intent.smalltalk:
+            text += "\n" + say("how_short", name)
+        return [Reply(text)]
+    if k in ("thanks", "bye", "howareyou", "about", "fine"):
         return [Reply(say(k, name))]
 
     # --- zametkalar ---

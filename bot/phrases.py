@@ -399,6 +399,20 @@ POOL: dict[str, list[str]] = {
         "Hech gap emas, {a}! 🤝",
         "Biz jamoamiz, {a}! 💪",
     ],
+    "fine": [
+        "Xursandman, {a}! 😊 Qanday yordam kerak?",
+        "Shukr, {a}! 🙌 Bugun nima qilamiz?",
+        "Ajoyib, {a}! 😊 Yozing, men tayyorman",
+        "Yaxshi eshitib xursand bo'ldim, {a} 😊",
+    ],
+    "fine_short": ["Xursandman! 😊", "Shukr! 🙌", "Ajoyib! 😊"],
+    "thanks_short": ["Arzimaydi! 😊", "Doim xizmatda! 🫡", "Hech gap emas! 🤝"],
+    "how_short": ["Men ham zo'rman, rahmat! 💪", "Ishlar joyida! 💪", "Yaxshi, rahmat! 😊"],
+    "save_offer": [
+        "Buni zametka qilib yozib qo'yaymi, {a}? 📝",
+        "Tushunmadim 🤔 Zametka sifatida saqlab qo'yaymi, {a}?",
+        "Bu yangi ishmi, {a}? Yozib qo'yaymi? 📝",
+    ],
     "bye": [
         "Xayr, {a}! Yaxshi dam oling 👋",
         "Ko'rishguncha, {a}! 🌙",

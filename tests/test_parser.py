@@ -220,3 +220,21 @@ def test_when_rich():
     assert parse_when("tushdan keyin", NOW)[0] == datetime(2026, 10, 24, 14, 0)
     # oddiy matnda vaqt yo'q
     assert parse_when("2 soat ishladim", NOW)[0] is None
+
+
+@pytest.mark.parametrize(
+    "text,kind,smalltalk",
+    [
+        ("rahmat yaxshi , Assalomu alaykum, nima bor bugunga ?", "agenda", ["thanks", "fine", "greet"]),
+        ("rahmat yaxshi", "fine", ["thanks", "fine"]),
+        ("alhamdulillah, o'zingiz-chi?", "howareyou", ["fine", "how"]),
+        ("Assalomu alaykum, qalaysiz?", "greet", ["greet", "how"]),
+        ("rahmat, 3 bo'ldi", "done", ["thanks"]),
+        ("salom, nima bor?", "agenda", ["greet"]),
+        ("yaxshi mahsulot topish kerak", "note", []),  # gap boshidagi "yaxshi" — suhbat emas
+        ("zo'r", "thanks", ["thanks"]),
+    ],
+)
+def test_smalltalk_chain(text, kind, smalltalk):
+    i = p(text)
+    assert (i.kind, i.smalltalk) == (kind, smalltalk)

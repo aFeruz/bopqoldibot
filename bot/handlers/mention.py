@@ -1,11 +1,14 @@
 import re
+import secrets
 
 from aiogram import F, Router
 from aiogram.enums import ChatType, MessageEntityType
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.handlers.actions import execute, send
+from bot import keyboards as kb
+from bot.handlers.actions import PENDING, execute, send
+from bot.phrases import say
 from bot.parser import Intent, parse
 from bot.services.common import local_now
 
@@ -68,8 +71,13 @@ async def on_message(msg: Message, session: AsyncSession, bot_username: str, bot
         if nums:
             intent.numbers = [int(nums[0])]
 
-    # botning xabariga oddiy reply zametka bo'lib ketmasin ("rahmat" ga esa javob beramiz)
+    # botning xabariga tag qilinmagan reply: tushunarsiz bo'lsa jim qolmaymiz, zametka qilishni so'raymiz
     if reply_to_bot and not mentioned and not private and intent.kind in ("note", "help"):
+        if intent.kind == "note" and intent.text:
+            token = secrets.token_hex(4)
+            PENDING[token] = {"text": text}
+            await msg.reply(say("save_offer", msg.from_user.first_name if msg.from_user else None),
+                            reply_markup=kb.save_offer(token))
         return
 
     replies = await execute(intent, msg, session, bot_username)

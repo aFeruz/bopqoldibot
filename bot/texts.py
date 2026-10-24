@@ -260,6 +260,8 @@ def settings_text(cs) -> str:
 
 
 def agenda_text(today: list[Note], overdue: list[Note], important: list[Note], open_count: int, stale) -> str:
+    if not (today or overdue or important or stale or open_count):
+        return "🏖 Bugunga reja bo'sh — ochiq ish ham, kutayotgan mijoz ham yo'q.\nYangi ish: <code>tovar sanash kerak</code>"
     lines = []
     if overdue:
         lines += [f"🔥 <b>Muddati o'tgan ({len(overdue)}):</b>"] + [f"  {note_line(n)}" for n in overdue[:10]] + [""]

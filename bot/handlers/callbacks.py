@@ -12,7 +12,7 @@ from bot.handlers.actions import (
 )
 from bot.phrases import say
 from bot.handlers.files import import_document
-from bot.parser import ClientInput
+from bot.parser import ClientInput, Intent, parse
 from bot.services import clients as clients_svc
 from bot.services import notes as notes_svc
 from bot.services import recurring as rec_svc
@@ -229,3 +229,23 @@ async def import_undo(cb: CallbackQuery, session: AsyncSession) -> None:
     await cb.answer(say("import_undone", first(cb)))
     tail = f"\nAloqa yozilgan {kept} ta mijoz saqlab qolindi." if kept else ""
     await edit(cb, Reply(f"{say('import_undone', first(cb))}\n🗑 O'chirildi: {removed} ta mijoz{tail}"))
+
+
+@router.callback_query(F.data.startswith(("ns:", "nn:")))
+async def save_offer(cb: CallbackQuery, session: AsyncSession) -> None:
+    action, token = cb.data.split(":")
+    pending = PENDING.pop(token, None)
+    if action == "nn" or not pending:
+        await cb.answer("Mayli" if action == "nn" else "Eskirgan tugma")
+        try:
+            await cb.message.delete()
+        except TelegramBadRequest:
+            pass
+        return
+    intent = parse("zametka: " + pending["text"], local_now())
+    if intent.kind != "note":
+        intent = Intent("note", text=pending["text"])
+    note = await notes_svc.add_note(session, cb.message.chat.id, intent.text, cb.from_user.id, who(cb),
+                                    intent.category, intent.important, intent.when, intent.assignee)
+    await cb.answer("📝 Saqlandi")
+    await edit(cb, Reply(texts.note_saved(note, say("note_saved", first(cb))), kb.note_saved(note)))

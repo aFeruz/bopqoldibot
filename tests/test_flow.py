@@ -196,3 +196,13 @@ def test_say_formats_without_braces():
         for _ in range(20):
             text = phrases.say(key, "Feruz", n=3, what="x", client="Ali", name="Ali", g="Salom", when="ertaga", who="@vali")
             assert "{" not in text and "}" not in text, (key, text)
+
+
+async def test_smalltalk_prefix(session):
+    await say(session, "tovar sanash")
+    out, *_ = await say(session, "rahmat yaxshi , Assalomu alaykum, nima bor bugunga ?")
+    first_line = out.split("\n")[0]
+    assert first_line.startswith("Va alaykum assalom") and any(p in first_line for p in all_phrases("fine_short"))
+    assert "Jami ochiq ishlar: <b>1</b>" in out
+    out, *_ = await say(session, "yaxshi")
+    assert any(p in out for p in all_phrases("fine"))
