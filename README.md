@@ -48,6 +48,10 @@ vaqtni ("yarim soatdan keyin", "ertaga kechqurun") va xatolik bilan yozilgan ism
 - Ishlangan va ishlanmagan mijozlar ro'yxati, davr va kategoriya bo'yicha filtr
 - Mijoz kartochkasi, telefon, izoh va kategoriyani tahrirlash, arxivlash
 - Aloqa izohida vaqt ko'rsatilsa ("3 kundan keyin qayta qo'ng'iroq"), avtomatik eslatma
+- Excel (`.xlsx`) va CSV fayldan import: ustunlar sarlavha bo'yicha avtomatik aniqlanadi, Meta Lead Ads
+  eksporti to'g'ridan-to'g'ri qabul qilinadi, dublikatlar telefon bo'yicha tekshiriladi, importni bekor qilish mumkin
+- Mijozlarni mas'ulga biriktirish (ism, raqam, kategoriya yoki "barcha" / "ishlanmaganlar" bo'yicha), mas'ulni
+  Telegram orqali xabardor qilish va ishlanmaguncha har kuni ertalab eslatish
 
 **Rejalashtirish va hisobotlar**
 
@@ -199,6 +203,44 @@ Quyidagi misollarda bot tag qilingan deb hisoblanadi (`@bopqoldibot ...`). To'li
 
 Topilmagan ism uchun bot yangi mijoz qo'shishni taklif qiladi; bir nechta mos kelsa, tanlash uchun tugmalar chiqaradi.
 
+### Mas'ul biriktirish
+
+| Xabar | Natija |
+|---|---|
+| `mijoz qo'sh: Ali, Vali, @sardor ga o'tkaz, eslatib tur` | Qo'shish, biriktirish va har kungi eslatma |
+| `Ali, Vali ni @sardor ga o'tkaz` | Mavjud mijozlarni biriktirish |
+| `#rangor mijozlarini @sardor ga ber, ertaga 10 da eslat` | Kategoriya bo'yicha, bir martalik eslatma bilan |
+| `ishlanmaganlarni @sardor ga ber`, `barcha mijozlarni @sardor ga ber` | Guruh bo'yicha biriktirish |
+| `@sardor mijozlari`, `@sardor ishlanmaganlari`, `mening mijozlarim` | Mas'ul bo'yicha ro'yxatlar |
+
+"Eslatib tur" so'zi bilan biriktirilgan mijozlar bo'yicha mas'ulga har kuni ertalab ro'yxat yuboriladi.
+Mijoz bilan aloqa qayd qilinishi bilan u ro'yxatdan chiqadi.
+
+### Excel va CSV import
+
+Faylni guruhga yuboring. Izohda bot tag qilinsa, darhol import qilinadi; aks holda bot import qilishni
+tugma orqali taklif qiladi. Shaxsiy chatda har qanday jadval import qilinadi. Allaqachon yuborilgan faylga
+javob (reply) qilib `@bopqoldibot kirit` deb yozish ham mumkin.
+
+Izohda quyidagilarni ko'rsatish mumkin: `#kategoriya`, `@masul`, `@masul ga o'tkaz, eslatib tur`,
+`ertaga 10 da eslat`.
+
+| Aniqlanadigan maydon | Sarlavha namunalari |
+|---|---|
+| Ism | `Ism`, `Mijoz`, `Name`, `Full name`, `ФИО`, `полное_имя` |
+| Telefon | `Telefon`, `Phone`, `Номер`, `номер_телефона` (`p:` prefiksi va 9 xonali raqamlar to'g'rilanadi) |
+| Kategoriya | `Kategoriya`, `Category`, `Segment` |
+| Izoh | `Izoh`, `Comment`, `Примечание`, sarlavhasiz qo'shimcha ustunlar |
+| Qiziqish | savol ko'rinishidagi sarlavha (`nimani ijaraga berasiz?`) |
+| Holat | `Status`, `lead_status` (standart `CREATED` qiymati e'tiborga olinmaydi) |
+| Manba | `platform`, `ad_name`, `Manba` |
+| Sana | `created_time`, `Sana`, `Date` |
+| Mas'ul | `Mas'ul`, `Manager`, `Менеджер` |
+
+Sarlavha topilmasa, birinchi ustun ism, telefonga o'xshagan ustun telefon deb olinadi. Meta test lidlari
+o'tkazib yuboriladi. Import natijasi ostidagi tugma orqali butun importni bekor qilish mumkin; aloqa qayd
+qilingan mijozlar bunda saqlab qolinadi.
+
 ### Eslatmalar va takroriy vazifalar
 
 | Xabar | Natija |
@@ -248,6 +290,7 @@ Topilmagan ism uchun bot yangi mijoz qo'shishni taklif qiladi; bir nechta mos ke
 | Bir martalik eslatma | belgilangan vaqtda | har doim |
 | Takroriy vazifa | qoidaga ko'ra | har doim |
 | Ertalabki reja | `MORNING_SUMMARY_HOUR` | o'chirilgan |
+| Mas'ulga ishlanmagan mijozlar ro'yxati | `MORNING_SUMMARY_HOUR` + 5 daqiqa | "eslatib tur" bilan biriktirilganda |
 | Kechki kundalik | `DAILY_SUMMARY_HOUR` | o'chirilgan |
 | Haftalik hisobot | juma, 18:00 | o'chirilgan |
 
@@ -273,6 +316,7 @@ bot/
     mention.py         mention va reply'larni aniqlash
     commands.py        slash buyruqlar
     callbacks.py       inline tugmalar bosilishi
+    files.py           Excel/CSV fayllarni qabul qilish
     actions.py         Intent ni bajarish (barcha kirish yo'llari uchun umumiy)
   services/
     notes.py           zametkalar
@@ -280,6 +324,7 @@ bot/
     recurring.py       takroriy vazifalar
     reminders.py       eslatmalar va guruh sozlamalari
     reports.py         statistika, kundalik, eksport
+    importer.py        jadvaldan mijozlarni o'qish (ustunlarni aniqlash, tozalash)
     common.py          vaqt zonasi, davrlar, kategoriyalar
 tests/                 parser, oqim va fon vazifalari testlari
 ```
@@ -289,7 +334,7 @@ tests/                 parser, oqim va fon vazifalari testlari
 | Jadval | Mazmuni |
 |---|---|
 | `notes` | Zametkalar: guruh ichidagi raqam, matn, holat, kategoriya, muddat, mas'ul |
-| `clients` | Mijozlar: raqam, ism, telefon, izoh, kategoriya, arxiv belgisi |
+| `clients` | Mijozlar: raqam, ism, telefon, izoh, kategoriya, mas'ul, eslatish belgisi, import partiyasi |
 | `interactions` | Mijozlar bilan aloqalar tarixi |
 | `categories` | Guruh kategoriyalari (zametka va mijozlar uchun umumiy) |
 | `reminders` | Bir martalik eslatmalar |

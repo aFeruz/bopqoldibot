@@ -11,7 +11,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from bot import jobs
 from bot.config import settings
 from bot.db import init_db
-from bot.handlers import callbacks, commands, mention
+from bot.handlers import callbacks, commands, files, mention
 
 log = logging.getLogger("bot")
 
@@ -51,7 +51,7 @@ async def main() -> None:
 
     dp = Dispatcher(bot_username=me.username, bot_id=me.id)
     dp.update.middleware(SessionMiddleware(sessionmaker))
-    dp.include_routers(commands.router, callbacks.router, mention.router)
+    dp.include_routers(commands.router, callbacks.router, files.router, mention.router)
 
     await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in COMMANDS])
 
@@ -59,6 +59,7 @@ async def main() -> None:
     args = [bot, sessionmaker]
     scheduler.add_job(jobs.tick, "interval", seconds=30, args=args)
     scheduler.add_job(jobs.send_morning, "cron", hour=settings.morning_summary_hour, minute=0, args=args)
+    scheduler.add_job(jobs.send_assignee_digests, "cron", hour=settings.morning_summary_hour, minute=5, args=args)
     scheduler.add_job(jobs.send_daily, "cron", hour=settings.daily_summary_hour, minute=0, args=args)
     scheduler.add_job(jobs.send_weekly, "cron", day_of_week="fri", hour=18, minute=0, args=args)
     scheduler.start()

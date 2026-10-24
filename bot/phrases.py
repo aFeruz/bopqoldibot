@@ -309,6 +309,33 @@ POOL: dict[str, list[str]] = {
         "🔔 {when} da eslatib qo'yaman",
         "⏰ Unutmaymiz: {when}",
     ],
+    "assigned_clients": [
+        "👤 {who}, sizga {n} ta mijoz biriktirildi. Omad! 💪",
+        "👤 {who}, {n} ta mijoz endi sizning qo'lingizda 🤝",
+        "👤 {who}, yangi topshiriq: {n} ta mijoz bilan bog'lanish 📞",
+    ],
+    "digest_on": [
+        "🔔 Ular bilan ishlanmaguncha {who} ga har kuni ertalab eslatib turaman",
+        "🔔 Nazoratga oldim: {who} ishlamaguncha har tong eslataman",
+    ],
+    "digest_head": [
+        "☀️ {who}, xayrli tong! Sizni kutayotgan mijozlar ({n} ta):",
+        "📞 {who}, bugun bu mijozlar bilan bog'laning ({n} ta):",
+        "🔔 {who}, eslatma: {n} ta mijoz hali kutmoqda",
+    ],
+    "import_done": [
+        "Fayl qabul qilindi, {a}! 📥",
+        "Hammasini bazaga kiritdim, {a} 📥",
+        "Import tugadi, {a}! 📊",
+    ],
+    "import_offer": [
+        "Bu jadvalni mijozlar bazasiga kiritaymi, {a}? 📥",
+        "Fayl ko'rindi 👀 Mijozlarni import qilaymi, {a}?",
+    ],
+    "import_empty": [
+        "Fayldan mijoz topolmadim, {a} 🤔 Ism yoki telefon ustuni borligini tekshiring",
+    ],
+    "import_undone": ["Importni bekor qildim, {a} ↩️", "Import ortga qaytarildi, {a} ↩️"],
     # --- takroriy / avtomatik ---
     "recurring_set": [
         "Jadvalga qo'ydim, {a}! 🔁",

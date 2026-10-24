@@ -194,5 +194,5 @@ async def test_reminder_and_export(session):
 def test_say_formats_without_braces():
     for key in phrases.POOL:
         for _ in range(20):
-            text = phrases.say(key, "Feruz", n=3, what="x", client="Ali", name="Ali", g="Salom", when="ertaga")
+            text = phrases.say(key, "Feruz", n=3, what="x", client="Ali", name="Ali", g="Salom", when="ertaga", who="@vali")
             assert "{" not in text and "}" not in text, (key, text)

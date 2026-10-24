@@ -58,6 +58,10 @@ class Client(Base):
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id", ondelete="SET NULL"))
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    assignee: Mapped[str | None] = mapped_column(String(256))  # "@vali"
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime)
+    remind_assignee: Mapped[bool] = mapped_column(Boolean, default=False)  # ishlanmaguncha har kuni eslatish
+    import_batch: Mapped[str | None] = mapped_column(String(16), index=True)
 
     category: Mapped[Category | None] = relationship(lazy="joined")
 

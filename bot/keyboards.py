@@ -112,3 +112,19 @@ def due_alert(n: Note) -> InlineKeyboardMarkup:
             B(text="📅 Ertaga", callback_data=f"nz:{n.number}:tomorrow"),
         ],
     ])
+
+
+def import_offer(token: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        B(text="📥 Mijozlarga import qilish", callback_data=f"im:{token}"),
+        B(text="✖️ Kerak emas", callback_data=f"ix:{token}"),
+    ]])
+
+
+def import_done(batch: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[B(text="↩️ Importni bekor qilish", callback_data=f"iu:{batch}")]])
+
+
+def assignee_digest(clients) -> InlineKeyboardMarkup | None:
+    btns = [B(text=f"✔️ {c.name[:18]}", callback_data=f"cq:{c.number}") for c in clients[:10]]
+    return InlineKeyboardMarkup(inline_keyboard=_rows(btns, 2)) if btns else None

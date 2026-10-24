@@ -8,6 +8,7 @@ from bot import keyboards as kb
 from bot import texts
 from bot.handlers.actions import agenda_body
 from bot.phrases import say
+from bot.services import clients as clients_svc
 from bot.services import notes as notes_svc
 from bot.services import recurring as rec_svc
 from bot.services import reminders as rem_svc
@@ -84,3 +85,12 @@ async def send_weekly(bot: Bot, sessionmaker) -> None:
         for chat_id in await rem_svc.chats_with(session, "weekly_summary"):
             st = await reports.stats(session, chat_id, "week")
             await _send(bot, chat_id, f"<b>{say('weekly_head')}</b>\n\n{texts.stats_text(st, 'week')}")
+
+
+async def send_assignee_digests(bot: Bot, sessionmaker) -> None:
+    """Har tong: mas'ulga biriktirilgan, hali ishlanmagan mijozlar (eslatish yoqilganlar)."""
+    async with sessionmaker() as session:
+        for chat_id in await clients_svc.chats_with_digest(session):
+            for who, clients in (await clients_svc.assignee_digest(session, chat_id)).items():
+                head = say("digest_head", None, who=texts.e(who), n=len(clients))
+                await _send(bot, chat_id, texts.assignee_digest(who, clients, head), kb.assignee_digest(clients))

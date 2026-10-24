@@ -44,6 +44,14 @@ def first_name(msg: Message) -> str | None:
     return u.first_name if u else None
 
 
+def resolve_me(msg: Message, assignee: str | None) -> tuple[str | None, bool]:
+    """'me' -> '@username'. (natija, muvaffaqiyatli)."""
+    if assignee != "me":
+        return assignee, True
+    username = msg.from_user.username if msg.from_user else None
+    return (f"@{username.lower()}", True) if username else (None, False)
+
+
 def headed(head: str, body: str) -> str:
     return f"{head}\n\n{body}"
 
@@ -73,16 +81,16 @@ async def render_notes(session: AsyncSession, chat_id: int, key: str, offset: in
 
 
 async def render_activity(session: AsyncSession, chat_id: int, key: str, offset: int = 0, name: str | None = None) -> Reply:
-    w, period, cat = key.split(".", 2)
+    w, period, cat, asg = (key.split(".", 3) + [""])[:4]
     worked_flag = w == "w"
     worked, not_worked = await clients_svc.activity(
-        session, chat_id, period_start(period), period_end(period), cat or None
+        session, chat_id, period_start(period), period_end(period), cat or None, asg or None
     )
     items = worked if worked_flag else not_worked
     if offset >= len(items):
         offset = max(0, (len(items) - 1) // ACTIVITY_PAGE * ACTIVITY_PAGE)
     page = items[offset: offset + ACTIVITY_PAGE]
-    body = texts.activity_list(items, worked_flag, period, cat or None, offset, ACTIVITY_PAGE)
+    body = texts.activity_list(items, worked_flag, period, cat or None, offset, ACTIVITY_PAGE, asg or None)
     if worked_flag:
         head = say("worked_head", name)
     else:
@@ -91,10 +99,12 @@ async def render_activity(session: AsyncSession, chat_id: int, key: str, offset:
 
 
 async def render_clients(session: AsyncSession, chat_id: int, key: str, offset: int = 0, name: str | None = None) -> Reply:
-    arch, cat = key.split(".", 1)
+    arch, cat, asg = (key.split(".", 2) + [""])[:3]
     archived = arch == "a"
-    items, total = await clients_svc.list_clients(session, chat_id, cat or None, archived, offset, CLIENTS_PAGE)
-    body = texts.clients_list(items, total, cat or None, offset, archived)
+    items, total = await clients_svc.list_clients(
+        session, chat_id, cat or None, archived, offset, CLIENTS_PAGE, assignee=asg or None
+    )
+    body = texts.clients_list(items, total, cat or None, offset, archived, asg or None)
     return Reply(headed(say("clients_head", name), body) if items else body,
                  kb.clients_list(key, offset, CLIENTS_PAGE, total))
 
@@ -170,12 +180,9 @@ async def _execute(intent: Intent, msg: Message, session: AsyncSession, bot_user
         return [Reply(texts.note_saved(note, head), kb.note_saved(note))]
 
     if k == "list":
-        assignee = intent.assignee
-        if assignee == "me":
-            username = msg.from_user.username if msg.from_user else None
-            if not username:
-                return [Reply(say("no_username", name))]
-            assignee = f"@{username.lower()}"
+        assignee, ok = resolve_me(msg, intent.assignee)
+        if not ok:
+            return [Reply(say("no_username", name))]
         key = notes_key(intent.status or "open", intent.category, intent.filter, assignee)
         return [await render_notes(session, chat_id, key, name=name)]
 
@@ -256,13 +263,37 @@ async def _execute(intent: Intent, msg: Message, session: AsyncSession, bot_user
         items = parse_client_list(intent.text)
         if not items:
             return [Reply(say("client_empty", name))]
-        added, dupes = await clients_svc.add_clients(session, chat_id, items)
+        added, dupes = await clients_svc.add_clients(
+            session, chat_id, items, default_assignee=intent.assignee, remind=intent.remind
+        )
         lines = []
         if added:
             lines += [say("client_added", name), f"➕ {len(added)} ta mijoz:"] + [texts.client_line(c) for c in added]
         if dupes:
             lines.append(("\n" if added else "") + "ℹ️ " + say("client_dupe", name) + ": "
                          + ", ".join(f"#{c.number} {texts.e(c.name)}" for c in dupes))
+        if intent.assignee and (added or dupes):
+            if dupes:
+                await clients_svc.assign(session, dupes, intent.assignee, intent.remind)
+            lines.append("")
+            lines.append(await assignment_notice(session, chat_id, added + dupes, intent, who))
+        return [Reply(texts.clip("\n".join(lines)))]
+
+    if k == "client_assign":
+        clients = await select_clients(session, chat_id, intent)
+        if not clients:
+            if intent.names and not re.search(r"mijoz|klient", intent.text or "", re.IGNORECASE):
+                # "hisobotni @vali ga ber" — mijoz emas, topshiriq
+                text = re.sub(r"(?:ni|larni)$", "", intent.text.strip()).strip()
+                fallback = Intent("note", text=text, assignee=intent.assignee)
+                return await _execute(fallback, msg, session, bot_username)
+            return [Reply(say("not_found", name, what="bunday mijozlarni"))]
+        await clients_svc.assign(session, clients, intent.assignee, intent.remind)
+        lines = [say("assigned", name)]
+        lines += [texts.client_line(c) for c in clients[:15]]
+        if len(clients) > 15:
+            lines.append(f"… va yana {len(clients) - 15} ta")
+        lines += ["", await assignment_notice(session, chat_id, clients, intent, who)]
         return [Reply(texts.clip("\n".join(lines)))]
 
     if k == "worked":
@@ -289,11 +320,17 @@ async def _execute(intent: Intent, msg: Message, session: AsyncSession, bot_user
         return replies
 
     if k in ("not_worked", "worked_list"):
-        key = f"{'w' if k == 'worked_list' else 'n'}.{intent.period or 'all'}.{intent.category or ''}"
+        assignee, ok = resolve_me(msg, intent.assignee)
+        if not ok:
+            return [Reply(say("no_username", name))]
+        key = f"{'w' if k == 'worked_list' else 'n'}.{intent.period or 'all'}.{intent.category or ''}.{assignee or ''}"
         return [await render_activity(session, chat_id, key, name=name)]
 
     if k == "clients":
-        key = f"{'a' if intent.status == 'all' else 'o'}.{intent.category or ''}"
+        assignee, ok = resolve_me(msg, intent.assignee)
+        if not ok:
+            return [Reply(say("no_username", name))]
+        key = f"{'a' if intent.status == 'all' else 'o'}.{intent.category or ''}.{assignee or ''}"
         return [await render_clients(session, chat_id, key, name=name)]
 
     if k == "client_card":
@@ -369,6 +406,36 @@ async def _execute(intent: Intent, msg: Message, session: AsyncSession, bot_user
         return [Reply(say("export_done", name))]
 
     return [Reply("Tushunmadim 🤔 /help")]
+
+
+async def select_clients(session: AsyncSession, chat_id: int, intent: Intent) -> list:
+    if intent.filter == "all":
+        clients, _ = await clients_svc.list_clients(session, chat_id, limit=10_000)
+        return clients
+    if intent.filter == "not_worked":
+        _, not_worked = await clients_svc.activity(session, chat_id, None, category=intent.category)
+        return [a.client for a in not_worked]
+    if intent.filter == "category":
+        return await clients_svc.by_category(session, chat_id, intent.category)
+    found = []
+    for n in intent.names:
+        match = await clients_svc.resolve(session, chat_id, n)
+        if len(match) == 1 and match[0] not in found:
+            found.append(match[0])
+    return found
+
+
+async def assignment_notice(session: AsyncSession, chat_id: int, clients: list, intent: Intent, who: str) -> str:
+    """Mas'ulga murojaat (Telegram mention orqali xabar boradi) va kerak bo'lsa eslatma qo'yish."""
+    names = ", ".join(c.name for c in clients[:5]) + (f" va yana {len(clients) - 5} ta" if len(clients) > 5 else "")
+    line = say("assigned_clients", None, who=texts.e(intent.assignee), n=len(clients))
+    if intent.when and intent.when > local_now():
+        text = f"{intent.assignee}, mijozlar bilan bog'lanish: {names}"
+        r = await rem_svc.add(session, chat_id, text, intent.when, who)
+        line += "\n" + say("followup_set", None, when=f"{intent.when:%d.%m %H:%M}") + f" <i>(eslatma #{r.id})</i>"
+    elif intent.remind:
+        line += "\n" + say("digest_on", None, who=texts.e(intent.assignee))
+    return line
 
 
 FOLLOWUP_RE = r"\b(qayta|yana|keyin|keyingi|takror|eslat|qo'ng'iroq qilaman|bog'lanaman|uchrashamiz)"

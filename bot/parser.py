@@ -60,6 +60,7 @@ class Intent:
     field: str | None = None  # note_update/client_update: qaysi maydon
     value: object = None
     rule: str | None = None  # takroriy: daily / workdays / weekly:N / monthly:N
+    remind: bool = False  # mas'ulga eslatib turish
 
 
 # --- yordamchi parserlar ----------------------------------------------------
@@ -252,10 +253,13 @@ class ClientInput:
     phone: str | None = None
     comment: str | None = None
     category: str | None = None
+    assignee: str | None = None
+    created_at: datetime | None = None  # importda: lid kelgan vaqt (UTC)
 
 
 def parse_client_line(line: str) -> ClientInput | None:
-    line, tags = extract_tags(line.strip(" -•*\t"))
+    line, assignee = extract_assignees(line.strip(" -•*\t"))
+    line, tags = extract_tags(line)
     comment = None
     if "|" in line:
         line, comment = (s.strip() for s in line.split("|", 1))
@@ -267,16 +271,18 @@ def parse_client_line(line: str) -> ClientInput | None:
     name = re.sub(r"\s{2,}", " ", line).strip(" ,-:—")
     if not name:
         return None
-    return ClientInput(name=name, phone=phone, comment=comment or None, category=tags[0] if tags else None)
+    return ClientInput(name=name, phone=phone, comment=comment or None, category=tags[0] if tags else None,
+                       assignee=assignee)
 
 
 def parse_client_list(text: str) -> list[ClientInput]:
     lines = [l for l in text.splitlines() if l.strip()]
     if len(lines) == 1 and not PHONE_RE.search(lines[0]) and "|" not in lines[0]:
         # "Ali, Vali va Sardor #vip" — umumiy teg hammasiga
-        body, tags = extract_tags(lines[0])
+        body, assignee = extract_assignees(lines[0])
+        body, tags = extract_tags(body)
         cat = tags[0] if tags else None
-        return [ClientInput(name=n, category=cat) for n in split_names(body)]
+        return [ClientInput(name=n, category=cat, assignee=assignee) for n in split_names(body)]
     result = []
     for line in lines:
         c = parse_client_line(line)
@@ -402,6 +408,49 @@ def extract_assignees(text: str) -> tuple[str, str | None]:
     return clean, ",".join(dict.fromkeys(f"@{u}" for u in users)) or None
 
 
+ASSIGN_VERB = r"(?:o'tkaz|ber|biriktir|topshir|yukla|ulab ber)\w*"
+ASSIGN_PHRASE_RE = re.compile(rf"((?:@\w+[\s,]*(?:va\s+)?)+)\s*(?:ga|ka)?\s+{ASSIGN_VERB}", re.IGNORECASE)
+REMIND_WORD_RE = re.compile(
+    r"\b(?:eslatib tur\w*|eslatib qo'y\w*|eslatib bor\w*|eslat\w*|esiga sol\w*|nazorat qil\w*|kuzatib bor\w*)",
+    re.IGNORECASE,
+)
+
+
+def split_instructions(text: str, now: datetime) -> tuple[str, str | None, bool, datetime | None]:
+    """'Ali, Vali, @sardor ga o'tkaz, ertaga eslat' -> ('Ali, Vali', '@sardor', True, ertaga 9:00).
+
+    Mas'ul va eslatish ko'rsatmasi bor vergul/qator bo'laklari matndan olib tashlanadi.
+    """
+    assignee, remind, when = None, False, None
+    out_lines = []
+    for line in text.splitlines() or [""]:
+        kept = []
+        for part in re.split(r"(?<=[,;])\s*", line):
+            core = part.strip(" ,;")
+            m = ASSIGN_PHRASE_RE.search(core)
+            r = REMIND_WORD_RE.search(core)
+            if not m and not r:
+                kept.append(part)
+                continue
+            if m:
+                _, assignee = extract_assignees(m.group(1))
+                core = (core[: m.start()] + core[m.end():]).strip()
+            if r:
+                remind = True
+                core = REMIND_WORD_RE.sub("", core).strip()
+                core = re.sub(r"\b(?:har kuni|har doim|doim|doimo|muntazam|tez-tez|unga|ularga)\b", "", core,
+                              flags=re.IGNORECASE).strip()
+                w, core = parse_when(core, now)
+                when = when or w
+            core = re.sub(r"^(?:va|hamda|keyin)\b|\b(?:va|hamda)$", "", core.strip(" ,;")).strip(" ,;")
+            if core:  # ko'rsatmadan oldin turgan ism: "Vali @sardor ga ber"
+                kept.append(core + ("," if part.rstrip().endswith(",") else ""))
+        joined = " ".join(p.strip() for p in kept).strip(" ,;")
+        if joined:
+            out_lines.append(joined)
+    return "\n".join(out_lines), assignee, remind, when
+
+
 WEEKDAY_ALT = "|".join(WEEKDAYS)
 RECUR_RE = re.compile(
     r"^(?:har|xar)\s+(?P<what>kuni|kun|ertalab|kechqurun|ish kun\w*|hafta\w*|"
@@ -464,7 +513,7 @@ def _tag(text: str) -> str | None:
     return tags[0] if tags else None
 
 
-def parse(raw: str, now: datetime | None = None) -> Intent:
+def parse(raw: str, now: datetime | None = None) -> Intent:  # noqa: C901
     """Gap boshidagi salomlashishni ajratib, qolganini tahlil qiladi.
 
     "Assalomu alaykum" -> greet; "Assalomu alaykum, ro'yxatni ber" -> list (greeting="salam").
@@ -501,7 +550,8 @@ def _parse(text: str, now: datetime | None = None) -> Intent:
 
     # --- eslatma ---
     m = REMIND_HEAD.match(text)
-    tail = None if m else REMIND_TAIL.match(text)
+    # "... @vali ga o'tkaz, eslatib tur" — bu mas'ulga eslatish, oddiy eslatma emas
+    tail = None if m or ASSIGN_PHRASE_RE.search(text) else REMIND_TAIL.match(text)
     if m or tail:
         when, body = parse_when((m or tail).group(1), now)
         if tail:  # "hisobotni ertaga eslat" -> "hisobot"
@@ -527,16 +577,47 @@ def _parse(text: str, now: datetime | None = None) -> Intent:
         text,
         re.IGNORECASE | re.DOTALL,
     )
+    if not m:
+        m = re.match(
+            r"^(.+?)(?:ni|larni)?\s+(?:mijoz\w* (?:qilib|sifatida) )?(?:mijozlarga|mijozlar bazasiga|bazaga|mijoz qilib)\s+"
+            r"(?:qo'sh|qosh|kirit|yoz)\w*[\s.!]*$",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
     if m and not re.match(rf"^{CLIENT_WORD}\s+#?\d+\s*$", low):
-        return Intent("client_add", text=m.group(1).strip())
+        body, assignee, remind, when = split_instructions(m.group(1).strip(), now)
+        return Intent("client_add", text=body, assignee=assignee, remind=remind, when=when)
+
+    # --- mas'ul bo'yicha mijozlar: "@vali mijozlari", "mening ishlanmagan mijozlarim" ---
     m = re.match(
-        r"^(.+?)(?:ni|larni)?\s+(?:mijoz\w* (?:qilib|sifatida) )?(?:mijozlarga|mijozlar bazasiga|bazaga|mijoz qilib)\s+"
-        r"(?:qo'sh|qosh|kirit|yoz)\w*[\s.!]*$",
-        text,
-        re.IGNORECASE | re.DOTALL,
-    )
+        r"^(?:(@\w+)|mening|o'zimning)\s*(?:ning)?\s*(ishlanmagan\w*|ishlamagan\w*|gaplashilmagan\w*)?\s*"
+        r"(?:mijoz|klient)\w*",
+        low,
+    ) or re.match(r"^(@\w+)\s*(?:ning)?\s*(ishlanmaganlari|ishlamaganlari|gaplashilmaganlari)\b", low)
     if m:
-        return Intent("client_add", text=m.group(1).strip())
+        who = m.group(1) or "me"
+        if m.group(2):
+            return Intent("not_worked", period=parse_period(low) or "all", category=_tag(text), assignee=who)
+        return Intent("clients", category=_tag(text), status="open", assignee=who)
+
+    # --- mijozlarni mas'ulga biriktirish: "Ali ni @vali ga o'tkaz", "#rangor mijozlarini @vali ga ber" ---
+    if ASSIGN_PHRASE_RE.search(text):
+        body, assignee, remind, when = split_instructions(text, now)
+        sel = re.sub(r"(?:larini|larni|lari|ni)$", "", body.strip()).strip()
+        has_client_word = re.search(rf"\b{CLIENT_WORD}\w*", sel, re.IGNORECASE)
+        sel = re.sub(rf"\b{CLIENT_WORD}\w*\b", "", sel, flags=re.IGNORECASE).strip(" ,")
+        selector, names = None, []
+        if re.fullmatch(r"(?:barcha|hamma|hammasi|butun)\w*", sel, re.IGNORECASE):
+            selector = "all"
+        elif re.fullmatch(r"(?:ishlanmagan|ishlamagan|gaplashilmagan)\w*", sel, re.IGNORECASE):
+            selector = "not_worked"
+        elif TAG_RE.fullmatch(sel.strip()):
+            selector = "category"
+        elif sel and (has_client_word or not re.fullmatch(r"[#\d\s,va]+", sel)):
+            names = split_names(re.sub(r"\b(?:ni|larni)\b", "", sel))
+        if assignee and (selector or names):
+            return Intent("client_assign", names=names, filter=selector, category=_tag(sel), assignee=assignee,
+                          remind=remind, when=when, text=body)
 
     # --- mijoz arxiv/o'chirish ---
     m = re.match(rf"^{CLIENT_WORD}\s+{NUMS}\s*(?:ni)?\s*(?:{DEL_WORDS}|arxiv\w*)", low)

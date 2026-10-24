@@ -11,6 +11,7 @@ from bot.handlers.actions import (
     PENDING, Reply, done_message, record_work, render_activity, render_card, render_clients, render_notes,
 )
 from bot.phrases import say
+from bot.handlers.files import import_document
 from bot.parser import ClientInput
 from bot.services import clients as clients_svc
 from bot.services import notes as notes_svc
@@ -202,3 +203,29 @@ async def snooze(cb: CallbackQuery, session: AsyncSession) -> None:
     msg = say("snoozed", first(cb), when=f"{when:%d.%m %H:%M}")
     await cb.answer(msg)
     await edit(cb, Reply(f"{msg}\n\n{texts.due_alert(note)}", kb.note_saved(note)))
+
+
+@router.callback_query(F.data.startswith(("im:", "ix:")))
+async def import_offer(cb: CallbackQuery, session: AsyncSession) -> None:
+    action, token = cb.data.split(":")
+    pending = PENDING.pop(token, None)
+    if action == "ix" or not pending:
+        await cb.answer("Mayli" if action == "ix" else "Eskirgan tugma, faylni qayta yuboring")
+        try:
+            await cb.message.delete()
+        except TelegramBadRequest:
+            pass
+        return
+    await cb.answer("📥 Import qilinyapti…")
+    reply = await import_document(cb.bot, session, cb.message.chat.id, pending["file_id"], pending["file_name"],
+                                  pending["caption"], who(cb), first(cb))
+    await edit(cb, reply)
+
+
+@router.callback_query(F.data.startswith("iu:"))
+async def import_undo(cb: CallbackQuery, session: AsyncSession) -> None:
+    batch = cb.data.split(":")[1]
+    removed, kept = await clients_svc.undo_import(session, cb.message.chat.id, batch)
+    await cb.answer(say("import_undone", first(cb)))
+    tail = f"\nAloqa yozilgan {kept} ta mijoz saqlab qolindi." if kept else ""
+    await edit(cb, Reply(f"{say('import_undone', first(cb))}\n🗑 O'chirildi: {removed} ta mijoz{tail}"))

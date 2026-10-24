@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -5,18 +6,32 @@ from difflib import SequenceMatcher
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.models import Category, Client, Interaction
+from bot.models import Category, Client, Interaction, utcnow
 from bot.parser import ClientInput
 from bot.services.common import get_category, next_number
 
 
-async def add_clients(session: AsyncSession, chat_id: int, items: list[ClientInput]) -> tuple[list[Client], list[Client]]:
-    """(qo'shilganlar, allaqachon bor bo'lganlar)."""
-    existing = {c.name.lower(): c for c in await session.scalars(select(Client).where(Client.chat_id == chat_id))}
+def _phone_key(phone: str | None) -> str | None:
+    digits = re.sub(r"\D", "", phone or "")
+    return digits[-9:] if len(digits) >= 9 else None
+
+
+async def add_clients(
+    session: AsyncSession, chat_id: int, items: list[ClientInput], batch: str | None = None,
+    default_category: str | None = None, default_assignee: str | None = None, remind: bool = False,
+) -> tuple[list[Client], list[Client]]:
+    """(qo'shilganlar, allaqachon bor bo'lganlar). Telefon bo'lsa — telefon bo'yicha, aks holda ism bo'yicha tekshiriladi."""
+    all_clients = list(await session.scalars(select(Client).where(Client.chat_id == chat_id)))
+    by_phone = {k: c for c in all_clients if (k := _phone_key(c.phone))}
+    by_name = {c.name.lower(): c for c in all_clients}
     added, dupes = [], []
     number = await next_number(session, Client, chat_id)
+    now = utcnow()
     for item in items:
-        old = existing.get(item.name.lower())
+        pk = _phone_key(item.phone)
+        old = by_phone.get(pk) if pk else by_name.get(item.name.lower())
+        if old is None and pk and item.name.lower() in by_name and not by_name[item.name.lower()].phone:
+            old = by_name[item.name.lower()]  # ilgari telefonsiz kiritilgan
         if old:
             if old.archived:
                 old.archived = False
@@ -24,17 +39,75 @@ async def add_clients(session: AsyncSession, chat_id: int, items: list[ClientInp
                 old.phone = item.phone
             dupes.append(old)
             continue
-        cat = await get_category(session, chat_id, item.category)
+        cat = await get_category(session, chat_id, item.category or default_category)
+        assignee = item.assignee or default_assignee
         client = Client(
             chat_id=chat_id, number=number, name=item.name, phone=item.phone, comment=item.comment,
-            category_id=cat.id if cat else None, category=cat,
+            category_id=cat.id if cat else None, category=cat, import_batch=batch,
+            assignee=assignee, assigned_at=now if assignee else None, remind_assignee=bool(assignee and remind),
         )
+        if item.created_at:
+            client.created_at = item.created_at
         number += 1
         session.add(client)
-        existing[item.name.lower()] = client
+        by_name[item.name.lower()] = client
+        if pk:
+            by_phone[pk] = client
         added.append(client)
     await session.commit()
     return added, dupes
+
+
+async def assign(session: AsyncSession, clients: list[Client], assignee: str | None, remind: bool) -> None:
+    now = utcnow()
+    for c in clients:
+        c.assignee = assignee
+        c.assigned_at = now if assignee else None
+        c.remind_assignee = bool(assignee and remind)
+    await session.commit()
+
+
+async def by_category(session: AsyncSession, chat_id: int, category: str) -> list[Client]:
+    return list(await session.scalars(_base(chat_id, category).order_by(Client.number)))
+
+
+async def undo_import(session: AsyncSession, chat_id: int, batch: str) -> tuple[int, int]:
+    """Import qilingan mijozlarni o'chiradi; aloqa yozilganlari saqlanadi. (o'chirildi, qoldi)."""
+    rows = list(await session.scalars(select(Client).where(Client.chat_id == chat_id, Client.import_batch == batch)))
+    touched = set(await session.scalars(
+        select(Interaction.client_id).where(Interaction.client_id.in_([c.id for c in rows]))
+    )) if rows else set()
+    removed = 0
+    for c in rows:
+        if c.id in touched:
+            continue
+        await session.delete(c)
+        removed += 1
+    await session.commit()
+    return removed, len(rows) - removed
+
+
+async def assignee_digest(session: AsyncSession, chat_id: int) -> dict[str, list[Client]]:
+    """Eslatish yoqilgan, biriktirilganidan beri ishlanmagan mijozlar — mas'ul bo'yicha."""
+    rows = list(await session.scalars(
+        select(Client).where(Client.chat_id == chat_id, Client.archived.is_(False),
+                             Client.remind_assignee.is_(True), Client.assignee.is_not(None)).order_by(Client.number)
+    ))
+    result: dict[str, list[Client]] = {}
+    for c in rows:
+        worked = await session.scalar(select(func.count()).select_from(Interaction).where(
+            Interaction.client_id == c.id, Interaction.created_at >= (c.assigned_at or c.created_at)))
+        if worked:
+            c.remind_assignee = False  # ishlandi — endi eslatmaymiz
+            continue
+        result.setdefault(c.assignee, []).append(c)
+    await session.commit()
+    return result
+
+
+async def chats_with_digest(session: AsyncSession) -> list[int]:
+    q = select(Client.chat_id).where(Client.remind_assignee.is_(True)).distinct()
+    return list(await session.scalars(q))
 
 
 async def resolve(session: AsyncSession, chat_id: int, name: str) -> list[Client]:
@@ -67,8 +140,10 @@ async def add_interaction(session: AsyncSession, client: Client, text: str, auth
     return it
 
 
-def _base(chat_id: int, category: str | None):
+def _base(chat_id: int, category: str | None, assignee: str | None = None):
     q = select(Client).where(Client.chat_id == chat_id, Client.archived.is_(False))
+    if assignee:
+        q = q.where(func.lower(Client.assignee) == assignee.lower())
     if category:
         q = q.join(Category, Client.category_id == Category.id).where(Category.name == category.lower())
     return q
@@ -76,9 +151,11 @@ def _base(chat_id: int, category: str | None):
 
 async def list_clients(
     session: AsyncSession, chat_id: int, category: str | None = None, archived: bool = False,
-    offset: int = 0, limit: int = 20,
+    offset: int = 0, limit: int = 20, assignee: str | None = None,
 ) -> tuple[list[Client], int]:
     q = select(Client).where(Client.chat_id == chat_id, Client.archived.is_(archived))
+    if assignee:
+        q = q.where(func.lower(Client.assignee) == assignee.lower())
     if category:
         q = q.join(Category, Client.category_id == Category.id).where(Category.name == category.lower())
     total = await session.scalar(select(func.count()).select_from(q.subquery()))
@@ -95,10 +172,10 @@ class ClientActivity:
 
 async def activity(
     session: AsyncSession, chat_id: int, since: datetime | None, until: datetime | None = None,
-    category: str | None = None,
+    category: str | None = None, assignee: str | None = None,
 ) -> tuple[list[ClientActivity], list[ClientActivity]]:
     """(ishlanganlar, ishlanmaganlar) davr bo'yicha. last_at — oxirgi aloqa (umuman)."""
-    clients = list(await session.scalars(_base(chat_id, category).order_by(Client.number)))
+    clients = list(await session.scalars(_base(chat_id, category, assignee).order_by(Client.number)))
     last_q = (
         select(Interaction.client_id, func.max(Interaction.created_at))
         .where(Interaction.chat_id == chat_id)

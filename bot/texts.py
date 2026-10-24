@@ -83,15 +83,22 @@ def client_line(c: Client) -> str:
     s = f"👤 <b>#{c.number}</b> {e(c.name)}"
     if c.phone:
         s += f" · 📞 {e(c.phone)}"
+    if c.assignee:
+        s += f" · 🙋 {e(c.assignee)}"
     if c.category:
         s += f" <i>#{e(c.category.name)}</i>"
     return s
 
 
-def clients_list(clients: list[Client], total: int, category: str | None, offset: int, archived: bool = False) -> str:
+def clients_list(
+    clients: list[Client], total: int, category: str | None, offset: int, archived: bool = False,
+    assignee: str | None = None,
+) -> str:
     title = "🗄 Arxivdagi mijozlar" if archived else "👥 Mijozlar"
     if category:
         title += f" · #{e(category)}"
+    if assignee:
+        title += f" · 🙋 {e(assignee)}"
     if not clients:
         return f"{title}\n\nHali mijoz yo'q. Qo'shish: <code>mijoz qo'sh: Ali, Vali</code>"
     lines = [f"{title} — {total} ta", ""] + [client_line(c) for c in clients]
@@ -100,11 +107,16 @@ def clients_list(clients: list[Client], total: int, category: str | None, offset
     return "\n".join(lines)
 
 
-def activity_list(items: list[ClientActivity], worked: bool, period: str, category: str | None, offset: int, limit: int) -> str:
+def activity_list(
+    items: list[ClientActivity], worked: bool, period: str, category: str | None, offset: int, limit: int,
+    assignee: str | None = None,
+) -> str:
     head = "✅ Ishlangan mijozlar" if worked else "⏳ Ishlanmagan mijozlar"
     head += f" ({period_title(period)})"
     if category:
         head += f" · #{e(category)}"
+    if assignee:
+        head += f" · 🙋 {e(assignee)}"
     if not items:
         return f"{head}\n\n" + ("Hali hech kim bilan ishlanmagan." if worked else "Hammasi bilan ishlangan 🎉")
     page = items[offset: offset + limit]
@@ -123,6 +135,8 @@ def client_card(c: Client, items: list[Interaction], total: int) -> str:
         lines.append(f"📞 {e(c.phone)}")
     if c.category:
         lines.append(f"🏷 #{e(c.category.name)}")
+    if c.assignee:
+        lines.append(f"🙋 Mas'ul: {e(c.assignee)}" + (" (har kuni eslatiladi)" if c.remind_assignee else ""))
     if c.comment:
         lines.append(f"💬 {e(c.comment)}")
     if c.archived:
@@ -266,6 +280,44 @@ def due_alert(n: Note) -> str:
     return f"📌 <b>#{n.number}</b> · {e(n.text)}\n⏰ {n.due_at:%d.%m %H:%M}{who}"
 
 
+def import_report(report, added: list[Client], dupes: list[Client], category: str | None, assignee: str | None) -> str:
+    lines = [f"📊 Qatorlar: <b>{report.rows}</b>", f"➕ Yangi mijozlar: <b>{len(added)}</b>"]
+    if dupes:
+        lines.append(f"♻️ Bazada bor edi: {len(dupes)}")
+    if report.duplicates_in_file:
+        lines.append(f"🔁 Fayl ichida takrorlangan: {report.duplicates_in_file}")
+    if report.skipped_test:
+        lines.append(f"🧪 Test lidlar o'tkazib yuborildi: {report.skipped_test}")
+    if report.skipped_empty:
+        lines.append(f"⚠️ Ismsiz qatorlar: {report.skipped_empty}")
+    if category:
+        lines.append(f"🏷 Kategoriya: #{e(category)}")
+    if assignee:
+        lines.append(f"🙋 Mas'ul: {e(assignee)}")
+    labels = {"name": "ism", "phone": "telefon", "interest": "qiziqish", "status": "holat", "comment": "izoh",
+              "category": "kategoriya", "source": "manba", "campaign": "reklama", "created": "sana",
+              "assignee": "mas'ul"}
+    cols = ", ".join(f"{labels.get(f, f)} ← <code>{e(h[:25])}</code>" for f, h in report.columns.items())
+    lines.append(f"\n🧭 Ustunlar: {cols}")
+    if added:
+        lines.append("\n<b>Birinchi mijozlar:</b>")
+        lines += [client_line(c) for c in added[:10]]
+        if len(added) > 10:
+            lines.append(f"… va yana {len(added) - 10} ta. Hammasi: <code>mijozlar</code>")
+    return "\n".join(lines)
+
+
+def assignee_digest(who: str, clients: list[Client], head: str) -> str:
+    lines = [f"<b>{head}</b>", ""]
+    for c in clients[:20]:
+        phone = f" · 📞 {e(c.phone)}" if c.phone else ""
+        lines.append(f"▫️ <b>#{c.number}</b> {e(c.name)}{phone}")
+    if len(clients) > 20:
+        lines.append(f"… va yana {len(clients) - 20} ta")
+    lines.append("\nIshlagach yozing: <code>Ali bilan gaplashdim</code> yoki ✔️ tugmasini bosing")
+    return "\n".join(lines)
+
+
 def clip(text: str) -> str:
     return text if len(text) <= MAX_LEN else text[:MAX_LEN] + "\n…"
 
@@ -296,6 +348,9 @@ HELP = """🤖 <b>Men jamoaning kundaligiman!</b> Meni tag qilib (@{u}) oddiy ga
 • <code>@{u} bugun kimlar bilan ishladik</code>, <code>mijozlarni ko'rsat</code>, <code>Ali haqida</code>, <code>mijoz 5 o'chir</code>
 • <code>@{u} Ali telefoni +99890...</code>, <code>Ali izoh: ...</code>, <code>Ali ni #vip ga o'tkaz</code>
 • <code>@{u} Ali bilan gaplashdim, 3 kundan keyin qayta qo'ng'iroq</code> — o'zim eslataman
+• <code>@{u} Ali, Vali ni @sardor ga o'tkaz, eslatib tur</code>, <code>#rangor mijozlarini @sardor ga ber</code>
+• <code>@{u} @sardor mijozlari</code>, <code>@sardor ishlanmaganlari</code>, <code>mening mijozlarim</code>
+• Excel/CSV faylni tashlang (izohiga <code>@{u} #rangor @sardor</code>) — hammasini bazaga kiritaman
 
 <b>📔 Kundalik va hisobot</b>
 • <code>@{u} kun yakuni</code> / <code>kecha nima qildik</code> / <code>haftalik xulosa</code>

@@ -46,6 +46,11 @@ async def on_message(msg: Message, session: AsyncSession, bot_username: str, bot
     if not (private or mentioned or reply_to_bot):
         return
 
+    if reply and reply.document and (mentioned or private):
+        from bot.handlers.files import import_from_reply  # files.py mention.py ni import qiladi
+        if await import_from_reply(msg, session, msg.bot, text):
+            return
+
     reply_text = (reply.text or reply.caption or "") if reply and not reply_to_bot else ""
     if not text and reply_text:
         # reply + @bot — o'sha xabarni zametka qilamiz
