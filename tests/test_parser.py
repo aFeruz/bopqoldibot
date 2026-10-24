@@ -14,7 +14,7 @@ def p(text):
 @pytest.mark.parametrize(
     "text,kind",
     [
-        ("", "help"),
+        ("", "labbay"),
         ("yordam", "help"),
         ("tovar sanash kerak", "note"),
         ("#ombor tovar sanash", "note"),

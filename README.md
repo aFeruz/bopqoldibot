@@ -64,7 +64,13 @@ vaqtni ("yarim soatdan keyin", "ertaga kechqurun") va xatolik bilan yozilgan ism
 **Muloqot**
 
 - Har bir javob tasodifiy tanlangan iboralardan tuziladi, bir xil javob ketma-ket takrorlanmaydi
-- Salomga alik olish, minnatdorchilik va xayrlashuvga javob
+- Salomga alik olish, minnatdorchilik va xayrlashuvga javob; gap boshidagi suhbat qismi
+  ("rahmat yaxshi, Assalomu alaykum, nima bor bugunga?") ajratilib, avval unga, keyin so'rovga javob beriladi
+- Bot xabariga reply kontekst bilan tushuniladi: zametka kartochkasiga `muhim`, mijoz kartochkasiga
+  `gaplashdim`, eslatmaga `10 minutdan keyin yana eslat`
+- Tasdiq (`ok`, `xo'p`), kulgi, emoji, stiker, ovozli xabar, "bormisan", soat va sana, latifa va
+  motivatsiya so'rovlariga javob; savol ko'rinishidagi xabarlar zametka emas, qidiruv sifatida ko'riladi
+- Tushunilmagan reply jim qoldirilmaydi: bot uni zametka sifatida saqlashni taklif qiladi
 - Har bir guruhning ma'lumotlari alohida saqlanadi; shaxsiy chatda shaxsiy kundalik sifatida ishlaydi
 
 ---
@@ -318,6 +324,7 @@ bot/
     callbacks.py       inline tugmalar bosilishi
     files.py           Excel/CSV fayllarni qabul qilish
     actions.py         Intent ni bajarish (barcha kirish yo'llari uchun umumiy)
+    context.py         bot xabariga reply: zametka / mijoz / eslatma kontekstini aniqlash
   services/
     notes.py           zametkalar
     clients.py         mijozlar va aloqalar
@@ -362,7 +369,9 @@ almashtiriladi. Har bir push va pull request GitHub Actions'da tekshiriladi.
 | Yangi buyruq turi | `bot/parser.py` (`Intent`) va `bot/handlers/actions.py` (`_execute`) |
 | Javob iboralari, murojaat so'zlari | `bot/phrases.py`: `POOL`, `ADDRESSES` |
 
-Har bir yangi ibora uchun `tests/test_parser.py` ga misol qo'shish tavsiya etiladi.
+Har bir yangi ibora uchun `tests/test_corpus.py` dagi `CASES` (to'g'ri tushunilishi kerak bo'lgan gaplar)
+yoki `TRICKY` (yanglish tushunilmasligi kerak bo'lgan gaplar) ro'yxatiga misol qo'shish tavsiya etiladi.
+Shu faylda botning har qanday xabariga qilingan reply javobsiz qolmasligi ham tekshiriladi.
 
 ### Sxemani o'zgartirish
 

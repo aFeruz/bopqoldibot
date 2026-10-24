@@ -123,7 +123,7 @@ def activity_list(
     lines = [f"{head} — {len(items)} ta", ""]
     for a in page:
         extra = f" · {a.count} marta" if worked and a.count > 1 else ""
-        lines.append(f"{'✔️' if worked else '▫️'} <b>#{a.client.number}</b> {e(a.client.name)} — <i>oxirgi: {ago(a.last_at)}</i>{extra}")
+        lines.append(f"{'✔️' if worked else '⏳'} 👤 <b>#{a.client.number}</b> {e(a.client.name)} — <i>oxirgi: {ago(a.last_at)}</i>{extra}")
     if len(items) > limit:
         lines.append(f"\n<i>{offset + 1}–{offset + len(page)} / {len(items)}</i>")
     return "\n".join(lines)
@@ -271,7 +271,7 @@ def agenda_text(today: list[Note], overdue: list[Note], important: list[Note], o
         lines += [f"❗ <b>Muhim ({len(important)}):</b>"] + [f"  {note_line(n)}" for n in important[:10]] + [""]
     if stale:
         lines.append(f"📞 <b>7 kundan beri gaplashilmagan mijozlar ({len(stale)}):</b>")
-        lines += [f"  ▫️ #{a.client.number} {e(a.client.name)} — <i>{ago(a.last_at)}</i>" for a in stale[:10]]
+        lines += [f"  👤 #{a.client.number} {e(a.client.name)} — <i>{ago(a.last_at)}</i>" for a in stale[:10]]
         lines.append("")
     lines.append(f"📋 Jami ochiq ishlar: <b>{open_count}</b>")
     return "\n".join(lines).strip()
@@ -313,7 +313,7 @@ def assignee_digest(who: str, clients: list[Client], head: str) -> str:
     lines = [f"<b>{head}</b>", ""]
     for c in clients[:20]:
         phone = f" · 📞 {e(c.phone)}" if c.phone else ""
-        lines.append(f"▫️ <b>#{c.number}</b> {e(c.name)}{phone}")
+        lines.append(f"👤 <b>#{c.number}</b> {e(c.name)}{phone}")
     if len(clients) > 20:
         lines.append(f"… va yana {len(clients) - 20} ta")
     lines.append("\nIshlagach yozing: <code>Ali bilan gaplashdim</code> yoki ✔️ tugmasini bosing")
@@ -369,4 +369,9 @@ HELP = """🤖 <b>Men jamoaning kundaligiman!</b> Meni tag qilib (@{u}) oddiy ga
 • Muddat kelganda o'zim xabar beraman (✅ / +1 soat / ertaga tugmalari bilan)
 • <code>@{u} sozlamalar</code> — ertalabki reja, kechki kundalik, haftalik hisobot
 
-Kirill alifbosida ham, salom-alik ham tushunaman 😊 Slash buyruqlar: /help"""
+<b>💬 Reply bilan boshqarish</b>
+• Mening zametka kartochkamga reply: <code>bo'ldi</code>, <code>muhim</code>, <code>ertaga sur</code>, <code>@vali ga ber</code>
+• Mijoz kartochkasiga reply: <code>gaplashdim, narx kelishildi</code>, <code>telefoni +998...</code>
+• Eslatmaga reply: <code>bo'ldi</code> yoki <code>10 minutdan keyin yana eslat</code>
+
+Salom-alik, latifa, motivatsiya, soat va sana — hammasini tushunaman 😊 /help"""

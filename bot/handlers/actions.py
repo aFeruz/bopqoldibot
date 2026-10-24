@@ -23,6 +23,13 @@ NOTES_PAGE = 10
 CLIENTS_PAGE = 20
 ACTIVITY_PAGE = 20
 MILESTONES = {5, 10, 15, 20, 25, 30, 40, 50, 75, 100}
+SIMPLE_REPLIES = {"labbay", "alive", "ack", "no", "laugh", "sorry", "compliment", "insult", "joke", "motivation"}
+MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"]
+WEEKDAYS_UZ = ["dushanba", "seshanba", "chorshanba", "payshanba", "juma", "shanba", "yakshanba"]
+QUESTION_STOPWORDS = {
+    "bormi", "nima", "qachon", "qayerda", "kim", "kimga", "nechta", "qanday", "qaysi", "bugun", "ertaga", "kecha",
+    "uchun", "bilan", "edi", "ekan", "mikan", "kerakmi", "bo'ladimi", "bo'ldimi", "qildimi", "keldimi", "yo'qmi",
+}
 
 # "Ali bilan ishladim: izoh" noaniq bo'lsa, tugma bosilguncha izohni shu yerda saqlaymiz.
 PENDING: dict[str, dict] = {}
@@ -185,6 +192,19 @@ async def _execute(intent: Intent, msg: Message, session: AsyncSession, bot_user
         if "how" in intent.smalltalk:
             text += "\n" + say("how_short", name)
         return [Reply(text)]
+    if k in SIMPLE_REPLIES:
+        return [Reply(say(k, name))]
+    if k == "emoji":
+        return [Reply(say(f"emoji_{intent.value}", name))]
+    if k == "time_now":
+        return [Reply(say("time_now", name, t=f"{local_now():%H:%M}"))]
+    if k == "date_now":
+        now = local_now()
+        return [Reply(say("date_now", name, d=f"{now.day}-{MONTHS[now.month - 1]}, {WEEKDAYS_UZ[now.weekday()]}"))]
+    if k == "reminder_done":
+        return [Reply(say("reminder_done", name) + f"\n✅ {texts.e(intent.text)}")]
+    if k == "question":
+        return [await answer_question(session, chat_id, intent.text, name)]
     if k in ("thanks", "bye", "howareyou", "about", "fine"):
         return [Reply(say(k, name))]
 
@@ -456,6 +476,31 @@ async def assignment_notice(session: AsyncSession, chat_id: int, clients: list, 
     elif intent.remind:
         line += "\n" + say("digest_on", None, who=texts.e(intent.assignee))
     return line
+
+
+async def answer_question(session: AsyncSession, chat_id: int, text: str, name: str | None) -> Reply:
+    """Noma'lum savol: kalit so'zlar bo'yicha zametka va mijozlardan qidiradi, topilmasa saqlashni taklif qiladi."""
+    words = []
+    for w in re.findall(r"[^\W\d_][\w']{2,}", text.lower()):
+        w = re.sub(r"(?:mi|mikan|chi|ni|ga|da|dan|ning|lar|lari)$", "", w)
+        if len(w) >= 3 and w not in QUESTION_STOPWORDS:
+            words.append(w)
+    notes, clients = [], []
+    for w in words[:4]:
+        for n in await notes_svc.search_notes(session, chat_id, w, limit=5):
+            if n not in notes:
+                notes.append(n)
+        for c in await clients_svc.resolve(session, chat_id, w):
+            if c not in clients and w in c.name.lower():
+                clients.append(c)
+    if notes or clients:
+        lines = [say("question_found", name), ""]
+        lines += [texts.note_line(n) for n in notes[:6]]
+        lines += [texts.client_line(c) for c in clients[:5]]
+        return Reply(texts.clip("\n".join(lines)))
+    token = secrets.token_hex(4)
+    PENDING[token] = {"text": text}
+    return Reply(say("question_unknown", name), kb.save_offer(token))
 
 
 FOLLOWUP_RE = r"\b(qayta|yana|keyin|keyingi|takror|eslat|qo'ng'iroq qilaman|bog'lanaman|uchrashamiz)"

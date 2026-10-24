@@ -361,9 +361,78 @@ HOW_RE = re.compile(
     r"sen-?chi|sizda nima gap|o'zingda nima gap)"
 )
 FINE_RE = re.compile(
-    r"^(?:men ham |o'zim ham |hammasi |ishlar |biz ham )?(?:yaxshi|yaxshiman|yaxshimiz|zo'r|zor|a'lo|alo|joyida|"
+    r"^(?:men ham |o'zim ham |hammasi |ishlar |biz ham )?(?:yaxshi|yaxshiman|yaxshimiz|zo'r|zor|a'lo|joyida|"
     r"yomon emas|chakki emas|alhamdulillah\w*|shukr\w*|normalno|norm|xorosho|otlichno|tinch|tinchlik)\b"
 )
+def _whole(alts: str) -> re.Pattern:
+    """Butun xabar shu so'z(lar)dan iborat bo'lsa (bir nechtasi ketma-ket ham bo'lishi mumkin)."""
+    return re.compile(rf"^(?:{alts})(?:[\s,!.]+(?:{alts}))*[\s!.)]*$")
+
+
+ACK_ALTS = (
+    r"ok|okey|okay|oke|xo'p|xop|mayli|tushunarli|tushundim|tushundik|bo'pti|bopti|ha|xa|haa|albatta|kelishdik|"
+    r"kelishildi|aniq|to'g'ri|togri|shunday|bo'ladi|boladi|yaxshi bo'ladi|ponyatno|ladno|davay|ok rahmat|"
+    r"qabul qilindi|qabul|zo'r bo'ldi|ajoyib|super|norm"
+)
+NO_ALTS = r"yo'q|yoq|kerak emas|shart emas|yo'q rahmat|net|hojati yo'q|hozircha yo'q|keyin|keyinroq|boshqa safar"
+ACK_RE = _whole(ACK_ALTS)
+NO_RE = _whole(NO_ALTS)
+ACK_HEAD_RE = re.compile(rf"^(?:{ACK_ALTS})\b")
+NO_HEAD_RE = re.compile(rf"^(?:{NO_ALTS})\b")
+LAUGH_RE = re.compile(
+    r"^(?:(?:x+a+){2,}\w*|(?:h+a+){2,}\w*|(?:x+i+){2,}|(?:h+e+){2,}|ha-?ha\w*|xa-?xa\w*|kulgili\w*|kuldim|"
+    r"kuldirding\w*|kuldirdingiz|lol|rofl|\)\)+)[\s!.)]*$"
+)
+ALIVE_RE = re.compile(
+    r"^(?:bormisan|bormisiz|bormi|shu yerdamisan|shu yerdamisiz|tirikmisan|tirikmisiz|uxladingmi|uxlab qolding\w*|"
+    r"uxlama\w*|uyg'on\w*|uyqudamisan|ishlayapsanmi|ishlayapsizmi|ishlayapti\w*mi|javob ber\w*|nega jim\w*|"
+    r"nega javob bermay\w*|eshityapsanmi|eshityapsizmi|alo+|allo+|hoy|ey|qayerdasan|qayerdasiz|labbay)\b"
+)
+COMPLIMENT_RE = re.compile(
+    r"(?:aqlli|zo'r|zor|ajoyib|yaxshi|super|klass|eng zo'r|molodes|malades|qoyil|zo'r ekan)\w*\s+"
+    r"(?:bot|botsan|botsiz|ekansan|ekansiz|yordamchi|kotib)\w*|^(?:sen|siz)\s+(?:zo'r|aqlli|ajoyib|eng zo'r|super|"
+    r"daxshat|zo'r ekan)\w*|^(?:seni |sizni )?(?:sevaman|yaxshi ko'raman)|^(?:sendan|sizdan) xursandman"
+)
+INSULT_RE = re.compile(
+    r"\b(?:ahmoq|axmoq|tentak|jinni|yomon bot|bekorchi|foydasiz|tupoy|durak|lox|eshak|befoyda|ishlamaysan|"
+    r"hech narsa bilmaysan|tushunmaysan|tushunmaysiz)\b"
+)
+SORRY_RE = re.compile(r"^(?:kechir\w*|uzr\w*|izvini\w*|sorry|afsus\w*|xafa bo'lma\w*)\b")
+JOKE_RE = re.compile(
+    r"\b(?:latifa|hazil|anekdot|qiziq gap|qiziqarli gap)\w*\s+(?:ayt|aytib|gapir|qil|bormi|top|ber|eshit)\w*|"
+    r"^(?:bitta |bir |yana )?(?:latifa|hazil|anekdot)\w*$|\bkuldir\w*"
+)
+MOTIV_RE = re.compile(
+    r"\b(?:motivatsiya|motivat|ruhlantir|ilhom|dalda|kuch ber|charchadim|charchadik|zerikdim|zerikarli|"
+    r"ishlagim kelmayapti|kayfiyat yo'q|kayfiyatim yo'q|kayfiyat\w* yomon|qiynaldim|holdan toydim)\w*"
+)
+TIME_ASK_RE = re.compile(r"^(?:hozir\s+)?(?:soat|vaqt)\s+(?:necha|nechchi|nechida|qancha|nechi)\w*|^nechchi bo'ldi")
+DATE_ASK_RE = re.compile(
+    r"^(?:bugun\s+)?(?:nechanchi|necha)\s*(?:sana|chislo|kun)?\w*$|bugun qaysi kun|bugun nima kun|bugun sana|"
+    r"sana qanaqa|sana nechchi|qaysi kun bugun|bugun haftaning qaysi|bugun nechanchi"
+)
+QUESTION_TAIL_RE = re.compile(
+    r"(?:\b(?:bormi|yo'qmi|kerakmi|mumkinmi|to'g'rimi|rostmi|shumi|umi|tayyormi|joyidami|yaxshimi)|"
+    r"\w(?:dimi|didimi|dingizmi|dikmi|yaptimi|yapsizmi|yapsanmi|adimi|ydimi|ladimi|mikan|mikin|misiz|misan|mizmi))"
+    r"[\s?!.]*$|\?\s*$"
+)
+EMOJI_GROUPS = [
+    ("laugh", "😂🤣😄😆😁😅😹😃"),
+    ("ack", "👍👌✅✔🆗🤝☑"),
+    ("love", "❤🧡💛💚💙💜🤍🖤💖💗💕😍🥰😘🙏"),
+    ("fire", "🔥💪🚀⚡💯🏆🥇👏🙌⭐🌟"),
+    ("sad", "😢😭😔😞☹🙁😩😫💔"),
+    ("wow", "😮😲😱🤯😳👀"),
+]
+
+
+def emoji_kind(text: str) -> str:
+    for kind, chars in EMOJI_GROUPS:
+        if any(c in text for c in chars):
+            return kind
+    return "other"
+
+
 BYE_RE = re.compile(r"^(?:xayr|hayr|ko'rishguncha|poka|yaxshi qoling|xayrli tun|hayrli tun|good night|bye)\b")
 ABOUT_RE = re.compile(r"^(?:sen kimsan|kimsan|isming nima|o'zing haqingda|sen nima qilasan)")
 HELP_RE = re.compile(
@@ -520,7 +589,7 @@ def _tag(text: str) -> str | None:
     return tags[0] if tags else None
 
 
-SMALLTALK_RES = [("thanks", THANKS_RE), ("fine", FINE_RE), ("how", HOW_RE)]
+SMALLTALK_RES = [("thanks", THANKS_RE), ("fine", FINE_RE), ("how", HOW_RE), ("ack", ACK_HEAD_RE), ("no", NO_HEAD_RE)]
 
 
 def _smalltalk_at(low: str) -> tuple[str, int, str | None] | None:
@@ -564,10 +633,13 @@ def parse(raw: str, now: datetime | None = None) -> Intent:
 
     "Assalomu alaykum" -> greet; "Assalomu alaykum, ro'yxatni ber" -> list (greeting="salam").
     """
+    raw_low = normalize(raw).lower()
+    if len(raw_low.split()) <= 7 and not re.search(r"\d", raw_low) and COMPLIMENT_RE.search(raw_low):  # "aqlli bot" — "bot" so'zi kerak
+        return Intent("compliment")
     text = _strip_fillers(normalize(raw))
     kinds, greeting, rest = _consume_smalltalk(text)
     if not kinds:
-        return _parse(text, now)
+        return _as_question(_parse(text, now), raw)
     if not rest:
         if greeting:
             return Intent("greet", greeting=greeting, smalltalk=kinds)
@@ -575,10 +647,21 @@ def parse(raw: str, now: datetime | None = None) -> Intent:
             return Intent("howareyou", smalltalk=kinds)
         if "fine" in kinds:
             return Intent("fine", smalltalk=kinds)
-        return Intent("thanks", smalltalk=kinds)
-    intent = _parse(rest, now)
+        if "thanks" in kinds:
+            return Intent("thanks", smalltalk=kinds)
+        return Intent("no" if kinds[-1] == "no" else "ack", smalltalk=kinds)
+    intent = _as_question(_parse(rest, now), raw)
     intent.greeting = greeting
     intent.smalltalk = kinds
+    return intent
+
+
+def _as_question(intent: Intent, raw: str) -> Intent:
+    """Savol ("ertaga yig'ilish bormi?") zametka bo'lib ketmasin — qidiruv/javob sifatida ko'riladi."""
+    if intent.kind != "note" or NOTE_PREFIX.match(normalize(raw).strip()):
+        return intent
+    if QUESTION_TAIL_RE.search(normalize(raw).strip()):
+        return Intent("question", text=intent.text)
     return intent
 
 
@@ -586,8 +669,44 @@ def _parse(text: str, now: datetime | None = None) -> Intent:
     now = now or datetime.now()
     low = text.lower()
 
-    if not low or HELP_RE.match(low):
+    if not low:
+        return Intent("labbay")
+    if not re.search(r"[^\W_]", low):  # faqat emoji / belgilar
+        if re.fullmatch(r"[\s)]+", low):
+            return Intent("laugh")
+        if "?" in low:
+            return Intent("labbay")
+        return Intent("emoji", value=emoji_kind(low))
+    if HELP_RE.match(low):
         return Intent("help")
+    if ACK_RE.match(low):
+        return Intent("ack")
+    if NO_RE.match(low):
+        return Intent("no")
+    if LAUGH_RE.match(low):
+        return Intent("laugh")
+    if ALIVE_RE.match(low):
+        return Intent("alive")
+    if TIME_ASK_RE.search(low):
+        return Intent("time_now")
+    if DATE_ASK_RE.search(low):
+        return Intent("date_now")
+    short = len(low.split()) <= 7 and not re.search(r"\d", low)  # raqam bor — demak ish haqida
+    if short and JOKE_RE.search(low):
+        return Intent("joke")
+    if short and MOTIV_RE.search(low):
+        return Intent("motivation")
+    if short and COMPLIMENT_RE.search(low):
+        return Intent("compliment")
+    if short and INSULT_RE.search(low):
+        return Intent("insult")
+    if SORRY_RE.match(low):
+        return Intent("sorry")
+    m = re.match(r"^nechta\s+(?:ochiq\s+|qolgan\s+)?(ish|vazifa|zametka|mijoz|klient)\w*", low)
+    if m:
+        if m.group(1) in ("mijoz", "klient"):
+            return Intent("clients", category=_tag(text), status="open")
+        return Intent("list", status="open", category=_tag(text))
     if HOW_RE.match(low):
         return Intent("howareyou")
     if ABOUT_RE.match(low):
@@ -726,6 +845,8 @@ def _parse(text: str, now: datetime | None = None) -> Intent:
     m = re.match(
         rf"^{NUMS}\s*(?:-?(?:chi|nchi|raqam\w*))?\s*(?:zametka\w*|vazifa\w*|ish\w*)?\s*(?:ni|ham|ni ham)?\s*{DONE_WORDS}[\s.!]*$", num
     ) or re.match(rf"^{DONE_WORDS}\s*[:\-]?\s*{NUMS}\s*$", num)
+    if not m:  # "bugun kayfiyat zo'r, 2 bo'ldi"
+        m = re.search(rf"(?:[,;.!]|\s(?:lekin|ammo|biroq|va|hamda))\s*{NUMS}\s*(?:ni|ham|ni ham)?\s*{DONE_WORDS}[\s.!]*$", num)
     if m:
         return Intent("done", numbers=parse_numbers(m.group(1)))
 

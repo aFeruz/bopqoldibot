@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot import keyboards as kb
 from bot.handlers.actions import PENDING, execute, send
+from bot.handlers.context import apply_context, reply_context
 from bot.phrases import say
 from bot.parser import Intent, parse
 from bot.services.common import local_now
@@ -65,15 +66,15 @@ async def on_message(msg: Message, session: AsyncSession, bot_username: str, bot
             text = text.rstrip(":") + ":\n" + reply_text
         intent = parse(text, local_now())
 
-    # botning xabariga reply qilib "bo'ldi" / "o'chir" — o'sha xabardagi #raqam olinadi
-    if intent.kind in ("done", "undo", "delete") and not intent.numbers and reply:
-        nums = re.findall(r"#(\d+)", reply.text or reply.caption or "")
-        if nums:
-            intent.numbers = [int(nums[0])]
+    # botning xabariga reply: kartochkadagi zametka/mijoz/eslatma kontekstida tushunamiz
+    if reply_to_bot:
+        ctx = reply_context(reply.text or reply.caption or "")
+        if ctx:
+            intent = apply_context(text, intent, ctx, local_now())
 
     # botning xabariga tag qilinmagan reply: tushunarsiz bo'lsa jim qolmaymiz, zametka qilishni so'raymiz
-    if reply_to_bot and not mentioned and not private and intent.kind in ("note", "help"):
-        if intent.kind == "note" and intent.text:
+    if reply_to_bot and not mentioned and not private and intent.kind == "note":
+        if intent.text:
             token = secrets.token_hex(4)
             PENDING[token] = {"text": text}
             await msg.reply(say("save_offer", msg.from_user.first_name if msg.from_user else None),
@@ -82,3 +83,14 @@ async def on_message(msg: Message, session: AsyncSession, bot_username: str, bot
 
     replies = await execute(intent, msg, session, bot_username)
     await send(msg, replies)
+
+
+@router.message(F.sticker | F.voice | F.video_note | F.audio)
+async def on_media(msg: Message, bot_id: int) -> None:
+    """Botga stiker yoki ovoz bilan javob berilsa ham jim qolmaymiz."""
+    reply = msg.reply_to_message
+    to_bot = bool(reply and reply.from_user and reply.from_user.id == bot_id)
+    if not (to_bot or msg.chat.type == ChatType.PRIVATE):
+        return
+    key = "sticker" if msg.sticker else "voice"
+    await msg.reply(say(key, msg.from_user.first_name if msg.from_user else None))
