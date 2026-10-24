@@ -13,6 +13,7 @@ from bot import keyboards as kb
 from bot import texts
 from bot.handlers.actions import PENDING, Reply, first_name, send
 from bot.handlers.mention import strip_mention
+from bot.handlers.saving import SAVE_RE, message_content, origin_name, save_text_note
 from bot.media import Media, describe, extract_media
 from bot.parser import extract_assignees, extract_tags, normalize, parse_note, split_instructions
 from bot.services import notes as notes_svc
@@ -71,7 +72,6 @@ async def import_document(
     return Reply(texts.clip(text), kb.import_done(batch) if added else None)
 
 
-SAVE_RE = re.compile(r"\b(?:eslab qol|saqla|saqlab|esda tut|yozib qo'y|yozib qoy|zametka|eslatma qil)\w*", re.IGNORECASE)
 IMPORT_RE = re.compile(r"\b(?:kirit|import|bazaga|mijoz)\w*", re.IGNORECASE)
 
 
@@ -153,3 +153,21 @@ async def import_from_reply(msg: Message, session: AsyncSession, bot: Bot, text:
     await send(msg, [result])
     return True
 
+
+
+@router.message(F.contact | F.location | F.venue | F.poll)
+async def on_shared_item(msg: Message, session: AsyncSession, bot_id: int) -> None:
+    """Kontakt, lokatsiya, so'rovnoma: shaxsiy chatda saqlanadi, botga reply bo'lsa — saqlash taklifi."""
+    content = message_content(msg)
+    if not content:
+        return
+    user = first_name(msg)
+    if msg.chat.type == ChatType.PRIVATE:
+        await send(msg, [await save_text_note(session, msg.chat.id, content, "", msg.from_user.id,
+                                              msg.from_user.full_name, user, origin_name(msg))])
+        return
+    reply_to = msg.reply_to_message
+    if reply_to and reply_to.from_user and reply_to.from_user.id == bot_id:
+        token = secrets.token_hex(4)
+        PENDING[token] = {"text": content}
+        await msg.reply(say("save_offer", user), reply_markup=kb.save_offer(token))

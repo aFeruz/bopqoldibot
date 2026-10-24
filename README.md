@@ -192,7 +192,11 @@ Quyidagi misollarda bot tag qilingan deb hisoblanadi (`@bopqoldibot ...`). To'li
 | `3 ni qaytar`, `3 o'chir`, `3 tuzat: yangi matn` | Qayta ochish, o'chirish, tahrirlash |
 | `3 ni #ombor ga o'tkaz`, `3 muhim`, `3 ni ertaga sur`, `3 ni @vali ga ber` | Zametkani o'zgartirish |
 | `tovarni qidir` | Qidiruv |
-| boshqa xabarga reply qilib `@bopqoldibot` | O'sha xabar zametka sifatida saqlanadi |
+| boshqa xabarga reply qilib `@bopqoldibot` | O'sha xabar o'zgarishsiz zametka sifatida saqlanadi |
+| boshqa xabarga reply: `@bopqoldibot eslab qol #narx`, `@bopqoldibot @vali ertaga` | Kategoriya, mas'ul, muddat bilan saqlanadi |
+| boshqa xabarga reply: `@bopqoldibot eslab qol, oy oxirigacha amal qiladi` | Xabar va qo'shimcha izoh saqlanadi |
+| boshqa xabarga reply: `@bopqoldibot ertaga 9 da eslat` | O'sha xabar matni bilan eslatma qo'yiladi |
+| shaxsiy chatga forward qilingan xabar | Buyruq sifatida emas, zametka sifatida saqlanadi |
 
 ### Fayllar
 
@@ -203,6 +207,9 @@ Quyidagi misollarda bot tag qilingan deb hisoblanadi (`@bopqoldibot ...`). To'li
 | `#shartnoma fayllari`, `rasmlar`, `ovozli xabarlar`, `hujjatlar` | Ro'yxat va yuklab olish tugmalari |
 | `fayllarni tashla #shartnoma`, `ovozli xabarlarni tashla` | Fayllarning o'zi yuboriladi (oxirgi 10 ta) |
 | `3 ni tashla`, bot yuborgan faylga reply qilib `o'chir` | Bitta faylni olish yoki boshqarish |
+
+Kontakt, lokatsiya va so'rovnomalar ham xuddi shunday saqlanadi (ism va telefon, xarita havolasi, savol va
+variantlar ko'rinishida).
 
 Bot fayllarni yuklab olmaydi va serverda saqlamaydi: Telegram bergan `file_id` saqlanadi va fayl shu
 identifikator orqali qayta yuboriladi. Jadval fayllari (`.xlsx`, `.csv`) odatda import qilinadi; izohda
@@ -340,6 +347,7 @@ bot/
     commands.py        slash buyruqlar
     callbacks.py       inline tugmalar bosilishi
     files.py           media va fayllarni qabul qilish: saqlash yoki jadval importi
+    saving.py          matn, kontakt, lokatsiya, forward xabarlarni eslab qolish
     actions.py         Intent ni bajarish (barcha kirish yo'llari uchun umumiy)
     context.py         bot xabariga reply: zametka / mijoz / eslatma kontekstini aniqlash
   services/

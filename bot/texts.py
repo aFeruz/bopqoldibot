@@ -32,7 +32,8 @@ def ago(dt_utc: datetime | None) -> str:
 def note_line(n: Note) -> str:
     mark = "✅" if n.status == "done" else ("❗" if n.important else "▫️")
     clip_icon = f"{media_icon(n.file_type)} " if n.file_id else ""
-    parts = [f"{mark} <b>#{n.number}</b> {clip_icon}{e(n.text)}"]
+    short = n.text if len(n.text) <= 160 else n.text[:157].rstrip() + "…"
+    parts = [f"{mark} <b>#{n.number}</b> {clip_icon}{e(short.replace(chr(10), ' '))}"]
     if n.category:
         parts.append(f"<i>#{e(n.category.name)}</i>")
     if n.due_at and n.status == "open":
@@ -359,10 +360,11 @@ HELP = """🤖 <b>Men jamoaning kundaligiman!</b> Meni tag qilib (@{u}) oddiy ga
 • <code>nima ishlar bor</code>, <code>#ombor</code>, <code>bugungi</code>, <code>muhimlar</code>, <code>mening ishlarim</code>
 • <code>3 bo'ldi</code>, <code>uchinchisi tayyor</code>, <code>oxirgisi bo'ldi</code>, <code>hisobotni tugatdim</code>
 • <code>3 ni qaytar</code>, <code>3 o'chir</code>, <code>3 tuzat: ...</code>, <code>3 muhim</code>, <code>3 ni ertaga sur</code>, <code>3 ni @vali ga ber</code>
-• <code>tovarni qidir</code>; birovning xabariga reply + <code>@{u}</code> — zametka bo'ladi
+• <code>tovarni qidir</code>
+• Istalgan xabarga reply: <code>@{u}</code>, <code>@{u} eslab qol #narx</code>, <code>@{u} @vali ertaga</code>, <code>@{u} ertaga 9 da eslat</code>
 
 <b>📎 Fayllar</b>
-• Rasm/ovoz/faylga reply: <code>@{u} eslab qol #shartnoma</code>
+• Rasm/ovoz/fayl/kontakt/lokatsiyaga reply: <code>@{u} eslab qol #shartnoma</code>
 • <code>#shartnoma fayllari</code>, <code>rasmlar</code>, <code>ovozli xabarlarni tashla</code>, <code>3 ni tashla</code>
 
 <b>👥 Mijozlar</b>

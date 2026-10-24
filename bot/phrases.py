@@ -435,6 +435,12 @@ POOL: dict[str, list[str]] = {
         "Qabul qildim, {a} 📥 Istalgan payt so'rang",
         "Joyiga qo'ydim, {a} 🗃",
     ],
+    "text_saved": [
+        "{src} xabarini eslab qoldim, {a} 🧠",
+        "{src} yozganini saqlab qo'ydim, {a} 📌",
+        "Yozib oldim, {a}! {src} xabari endi kundalikda 📔",
+        "{src} aytganini unutmaymiz, {a} 😉",
+    ],
     "media_offer": [
         "Buni saqlab qo'yaymi, {a}? 📎",
         "Faylni kundalikka qo'shib qo'yaymi, {a}? 🗂",
