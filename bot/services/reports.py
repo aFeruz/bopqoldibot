@@ -102,12 +102,14 @@ async def export_csv(session: AsyncSession, chat_id: int) -> dict[str, bytes]:
     files = {}
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["#", "Matn", "Kategoriya", "Holat", "Muhim", "Muddat", "Muallif", "Yaratilgan", "Bajarilgan", "Kim bajardi"])
+    w.writerow(["#", "Matn", "Kategoriya", "Holat", "Muhim", "Muddat", "Muallif", "Yaratilgan", "Bajarilgan", "Kim bajardi",
+                "Mas'ul", "Fayl"])
     for n in await session.scalars(select(Note).where(Note.chat_id == chat_id).order_by(Note.number)):
         w.writerow([
             n.number, n.text, n.category.name if n.category else "", n.status, "ha" if n.important else "",
             n.due_at.strftime("%Y-%m-%d %H:%M") if n.due_at else "", n.author_name, _fmt(n.created_at),
-            _fmt(n.done_at), n.done_by or "",
+            _fmt(n.done_at), n.done_by or "", n.assignee or "",
+            f"{n.file_type}: {n.file_name}" if n.file_name else (n.file_type or ""),
         ])
     files["zametkalar.csv"] = buf.getvalue().encode("utf-8-sig")
 

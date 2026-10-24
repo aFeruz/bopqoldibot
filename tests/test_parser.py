@@ -238,3 +238,17 @@ def test_when_rich():
 def test_smalltalk_chain(text, kind, smalltalk):
     i = p(text)
     assert (i.kind, i.smalltalk) == (kind, smalltalk)
+
+
+def test_parse_note_keeps_details():
+    """Reply/izohdan zametka: oldin "zametka: " prefiksi ro'yxat so'rovi deb tushunilib, teglar yo'qolardi."""
+    from bot.parser import parse_note
+
+    i = parse_note("eslab qol #shartnoma Ali bilan imzolangan nusxa", NOW)
+    assert (i.text, i.category) == ("Ali bilan imzolangan nusxa", "shartnoma")
+    i = parse_note("saqlab qo'y #hisobot", NOW)
+    assert (i.text, i.category) == ("", "hisobot")
+    i = parse_note("! #ombor @ali_k ertaga tovar sanash", NOW)
+    assert i.important and i.category == "ombor" and i.assignee == "@ali_k" and i.when.day == 25
+    i = parse_note("zametkalar ro'yxatini yangilash", NOW)
+    assert i.kind == "note" and i.text == "zametkalar ro'yxatini yangilash"

@@ -203,6 +203,21 @@ async def _execute(intent: Intent, msg: Message, session: AsyncSession, bot_user
         return [Reply(say("date_now", name, d=f"{now.day}-{MONTHS[now.month - 1]}, {WEEKDAYS_UZ[now.weekday()]}"))]
     if k == "reminder_done":
         return [Reply(say("reminder_done", name) + f"\n✅ {texts.e(intent.text)}")]
+    if k == "files":
+        return await files_reply(msg, session, chat_id, intent.category, intent.value, intent.filter == "send", name)
+    if k == "send_file":
+        notes = await notes_svc.get_notes(session, chat_id, intent.numbers)
+        replies, sent = [], 0
+        for num in intent.numbers:
+            note = notes.get(num)
+            if note is None:
+                replies.append(Reply(say("not_found", name, what=f"#{num} zametkani")))
+            elif note.file_id:
+                await send_note_file(msg.bot, chat_id, note, reply_to=msg.message_id)
+                sent += 1
+            else:
+                replies.append(Reply(headed(say("no_file", name), texts.note_card(note)), kb.note_saved(note)))
+        return replies
     if k == "question":
         return [await answer_question(session, chat_id, intent.text, name)]
     if k in ("thanks", "bye", "howareyou", "about", "fine"):
@@ -476,6 +491,30 @@ async def assignment_notice(session: AsyncSession, chat_id: int, clients: list, 
     elif intent.remind:
         line += "\n" + say("digest_on", None, who=texts.e(intent.assignee))
     return line
+
+
+FILES_PAGE = 10
+
+
+async def send_note_file(bot, chat_id: int, note: Note, reply_to: int | None = None) -> None:
+    from bot.media import send_media
+    await send_media(bot, chat_id, note.file_id, note.file_type, texts.note_caption(note), reply_to)
+
+
+async def files_reply(
+    msg: Message, session: AsyncSession, chat_id: int, category: str | None, ftype: str | None, send_all: bool,
+    name: str | None,
+) -> list[Reply]:
+    notes, total = await notes_svc.list_files(session, chat_id, category, ftype, limit=FILES_PAGE)
+    if not notes:
+        return [Reply(say("files_empty", name) + "\nSaqlash: faylga reply qilib <code>@bot eslab qol #kategoriya</code>")]
+    if send_all:
+        for n in reversed(notes):
+            await send_note_file(msg.bot, chat_id, n)
+        more = f"\nYana {total - len(notes)} ta bor — kategoriya yoki turini aniqlashtiring" if total > len(notes) else ""
+        return [Reply(say("files_sent", name, n=len(notes)) + more)]
+    body = texts.files_list(notes, total, category, ftype)
+    return [Reply(headed(say("files_head", name), body), kb.files_list(notes, category, ftype))]
 
 
 async def answer_question(session: AsyncSession, chat_id: int, text: str, name: str | None) -> Reply:

@@ -4,7 +4,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.handlers.actions import execute, send
-from bot.parser import Intent, normalize, parse, parse_numbers, split_names
+from bot.parser import Intent, normalize, parse, parse_note, parse_numbers, split_names
 from bot.services import reminders as rem_svc
 from bot.services.common import local_now
 
@@ -52,9 +52,7 @@ async def cmd_template(msg: Message, command: CommandObject, session: AsyncSessi
 @router.message(Command("note"))
 async def cmd_note(msg: Message, command: CommandObject, session: AsyncSession, bot_username: str) -> None:
     text = command.args or (msg.reply_to_message.text if msg.reply_to_message else "") or ""
-    intent = parse("zametka: " + text, local_now()) if text else Intent("note")
-    if intent.kind != "note":
-        intent = Intent("note", text=normalize(text))
+    intent = parse_note(text, local_now()) if text else Intent("note")
     await run(msg, intent, session, bot_username)
 
 

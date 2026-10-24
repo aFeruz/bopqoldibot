@@ -23,10 +23,21 @@ def _pager(prefix: str, offset: int, limit: int, total: int, refresh: bool = Fal
 
 
 def note_saved(n: Note) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
+    rows = [[
         B(text="✅ Bajarildi", callback_data=f"nd:{n.number}"),
         B(text="↩️ Bekor qilish", callback_data=f"nx:{n.number}"),
-    ]])
+    ]]
+    if n.file_id:
+        rows.append([B(text="📎 Faylni olish", callback_data=f"nf:{n.number}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def files_list(notes: list[Note], category: str | None, ftype: str | None) -> InlineKeyboardMarkup:
+    from bot.media import icon
+    btns = [B(text=f"{icon(n.file_type)} #{n.number}", callback_data=f"nf:{n.number}") for n in notes]
+    rows = _rows(btns, 5)
+    rows.append([B(text="📤 Hammasini yuborish", callback_data=f"fs:{category or ''}.{ftype or ''}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def note_done(n: Note) -> InlineKeyboardMarkup:

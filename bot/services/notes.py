@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.models import Category, Note, utcnow
@@ -11,13 +11,15 @@ from bot.services.common import get_category, local_now, next_number
 async def add_note(
     session: AsyncSession, chat_id: int, text: str, author_id: int | None, author_name: str,
     category: str | None = None, important: bool = False, due_at: datetime | None = None,
-    assignee: str | None = None,
+    assignee: str | None = None, file_id: str | None = None, file_type: str | None = None,
+    file_name: str | None = None,
 ) -> Note:
     cat = await get_category(session, chat_id, category)
     note = Note(
         chat_id=chat_id, number=await next_number(session, Note, chat_id), text=text,
         category_id=cat.id if cat else None, category=cat, important=important, due_at=due_at,
         author_id=author_id, author_name=author_name, assignee=assignee,
+        file_id=file_id, file_type=file_type, file_name=file_name,
         # muddat allaqachon o'tgan bo'lsa ("bugun" 9:00 dan keyin yozilgan) — darhol xabar yubormaymiz
         due_notified=bool(due_at and due_at <= local_now()),
     )
@@ -96,7 +98,7 @@ async def search_notes(session: AsyncSession, chat_id: int, query: str, limit: i
     words = [w for w in query.lower().split() if w]
     q = select(Note).where(Note.chat_id == chat_id)
     for w in words:
-        q = q.where(func.lower(Note.text).contains(w))
+        q = q.where(or_(func.lower(Note.text).contains(w), func.lower(Note.file_name).contains(w)))
     return list(await session.scalars(q.order_by(Note.number.desc()).limit(limit)))
 
 
@@ -183,3 +185,22 @@ async def agenda(session: AsyncSession, chat_id: int) -> tuple[list[Note], list[
     overdue = await session.scalars(base.where(Note.due_at < midnight).order_by(Note.due_at))
     important = await session.scalars(base.where(Note.important.is_(True), Note.due_at.is_(None)).order_by(Note.number))
     return list(today), list(overdue), list(important), await count_open(session, chat_id)
+
+
+FILE_TYPE_GROUPS = {"photo": ("photo",), "voice": ("voice", "audio", "video_note"), "video": ("video", "video_note"),
+                    "document": ("document",)}
+
+
+async def list_files(
+    session: AsyncSession, chat_id: int, category: str | None = None, ftype: str | None = None,
+    limit: int = 30,
+) -> tuple[list[Note], int]:
+    """Fayl biriktirilgan zametkalar (eng yangisi birinchi)."""
+    q = select(Note).where(Note.chat_id == chat_id, Note.file_id.is_not(None))
+    if category:
+        q = q.join(Category, Note.category_id == Category.id).where(Category.name == category.lower())
+    if ftype:
+        q = q.where(Note.file_type.in_(FILE_TYPE_GROUPS.get(ftype, (ftype,))))
+    total = await session.scalar(select(func.count()).select_from(q.subquery()))
+    rows = await session.scalars(q.order_by(Note.number.desc()).limit(limit))
+    return list(rows), total or 0

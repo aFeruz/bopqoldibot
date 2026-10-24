@@ -39,6 +39,9 @@ class Note(Base):
     done_at: Mapped[datetime | None] = mapped_column(DateTime)
     done_by: Mapped[str | None] = mapped_column(String(128))
     assignee: Mapped[str | None] = mapped_column(String(256))  # "@ali,@vali"
+    file_id: Mapped[str | None] = mapped_column(String(256))  # biriktirilgan media (Telegram file_id)
+    file_type: Mapped[str | None] = mapped_column(String(16))  # photo / voice / video / document / ...
+    file_name: Mapped[str | None] = mapped_column(String(256))
     # eski yozuvlar uchun True — yangilanishdan keyin eski muddatlar haqida birdan xabar yog'ilmasin
     due_notified: Mapped[bool] = mapped_column(Boolean, default=False, info={"migrate_default": True})
 

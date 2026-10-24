@@ -1,6 +1,8 @@
 from datetime import datetime
 from html import escape
 
+from bot.media import describe as describe_media
+from bot.media import icon as media_icon
 from bot.models import Client, Interaction, Note, Reminder
 from bot.services.clients import ClientActivity
 from bot.services.common import local_now, period_title, to_local
@@ -29,7 +31,8 @@ def ago(dt_utc: datetime | None) -> str:
 
 def note_line(n: Note) -> str:
     mark = "✅" if n.status == "done" else ("❗" if n.important else "▫️")
-    parts = [f"{mark} <b>#{n.number}</b> {e(n.text)}"]
+    clip_icon = f"{media_icon(n.file_type)} " if n.file_id else ""
+    parts = [f"{mark} <b>#{n.number}</b> {clip_icon}{e(n.text)}"]
     if n.category:
         parts.append(f"<i>#{e(n.category.name)}</i>")
     if n.due_at and n.status == "open":
@@ -52,6 +55,8 @@ def note_saved(n: Note, head: str) -> str:
         extra.append(f"⏰ {n.due_at:%d.%m.%Y %H:%M}")
     if n.assignee:
         extra.append(f"👤 {e(n.assignee.replace(',', ', '))}")
+    if n.file_id:
+        extra.append(f"📎 {e(describe_media(n.file_type, n.file_name))}")
     tail = ("\n" + " · ".join(extra)) if extra else ""
     return f"{head}\n\n📌 <b>#{n.number}</b> · {e(n.text)}{tail}"
 
@@ -215,6 +220,8 @@ def reminders_list(items: list[Reminder]) -> str:
 def note_card(n: Note) -> str:
     """Bitta zametka: o'zgartirilgandan keyin ko'rsatish uchun."""
     lines = [f"📌 <b>#{n.number}</b> · {e(n.text)}"]
+    if n.file_id:
+        lines.append(f"📎 {e(describe_media(n.file_type, n.file_name))}")
     if n.category:
         lines.append(f"🏷 #{e(n.category.name)}")
     if n.important:
@@ -320,58 +327,61 @@ def assignee_digest(who: str, clients: list[Client], head: str) -> str:
     return "\n".join(lines)
 
 
+def note_caption(n: Note) -> str:
+    """Qayta yuborilgan fayl izohi: reply qilinsa kontekst (📌 #N) orqali zametka aniqlanadi."""
+    tag = f" #{e(n.category.name)}" if n.category else ""
+    return f"📌 <b>#{n.number}</b> · {e(n.text)}{tag}"
+
+
+def files_list(notes: list[Note], total: int, category: str | None, ftype: str | None) -> str:
+    titles = {"photo": "🖼 Rasmlar", "voice": "🎤 Ovozli xabarlar", "video": "🎬 Videolar", "document": "📄 Hujjatlar"}
+    title = titles.get(ftype or "", "📎 Fayllar")
+    if category:
+        title += f" · #{e(category)}"
+    lines = [f"{title} — {total} ta", ""]
+    for n in notes:
+        date = f"{to_local(n.created_at):%d.%m}"
+        lines.append(f"{media_icon(n.file_type)} <b>#{n.number}</b> {e(n.text)} <i>· {date} · {e(n.author_name)}</i>")
+    if total > len(notes):
+        lines.append(f"\n<i>Oxirgi {len(notes)} tasi ko'rsatildi</i>")
+    lines.append("\nOlish: tugmani bosing yoki <code>3 ni tashla</code>")
+    return "\n".join(lines)
+
+
 def clip(text: str) -> str:
     return text if len(text) <= MAX_LEN else text[:MAX_LEN] + "\n…"
 
 
-HELP = """🤖 <b>Men jamoaning kundaligiman!</b> Meni tag qilib (@{u}) oddiy gapiring — buyruq yodlash shart emas.
+HELP = """🤖 <b>Men jamoaning kundaligiman!</b> Meni tag qilib (@{u}) oddiy gapiring.
 
 <b>📝 Zametkalar</b>
-• <code>@{u} tovar sanash kerak</code> yoki <code>iltimos, kassani tekshirish deb yozib qo'y</code>
-• <code>@{u} ! #ombor ertaga kechqurun inventarizatsiya</code> — muhim, kategoriya, muddat
-• <code>@{u} nima ishlar bor</code> / <code>ro'yxatni ko'rsat</code> / <code>#ombor</code> / <code>bugungi reja</code> / <code>muhimlar</code>
-• <code>@{u} 3 bo'ldi</code>, <code>3, 5 bitirdim</code>, <code>uchinchisi tayyor</code>, <code>oxirgisi bo'ldi</code>
-• <code>@{u} hisobotni tugatdim</code> — matnidan topib yopaman
-• Mening xabarimga reply qilib <code>bo'ldi</code> / <code>o'chir</code> — o'sha zametka
-• <code>@{u} qilingan ishlar</code>, <code>3 xato bosdim</code>, <code>3 kerak emas</code>, <code>3 tuzat: yangi matn</code>
-• <code>@{u} tovarni qidir</code>
-• Birovning xabariga reply qilib <code>@{u}</code> — o'sha xabar zametka bo'ladi
+• <code>tovar sanash kerak</code>, <code>! #ombor @ali ertaga kechqurun inventarizatsiya</code>
+• <code>nima ishlar bor</code>, <code>#ombor</code>, <code>bugungi</code>, <code>muhimlar</code>, <code>mening ishlarim</code>
+• <code>3 bo'ldi</code>, <code>uchinchisi tayyor</code>, <code>oxirgisi bo'ldi</code>, <code>hisobotni tugatdim</code>
+• <code>3 ni qaytar</code>, <code>3 o'chir</code>, <code>3 tuzat: ...</code>, <code>3 muhim</code>, <code>3 ni ertaga sur</code>, <code>3 ni @vali ga ber</code>
+• <code>tovarni qidir</code>; birovning xabariga reply + <code>@{u}</code> — zametka bo'ladi
 
-<b>👤 Mas'ullar va o'zgartirish</b>
-• <code>@{u} @ali tovar sanash ertaga</code> — Aliga topshiriq
-• <code>@{u} mening ishlarim</code> / <code>@ali ishlari</code>
-• <code>@{u} 3 ni @vali ga ber</code>, <code>3 ni #ombor ga o'tkaz</code>, <code>3 muhim</code>, <code>3 ni ertaga sur</code>
+<b>📎 Fayllar</b>
+• Rasm/ovoz/faylga reply: <code>@{u} eslab qol #shartnoma</code>
+• <code>#shartnoma fayllari</code>, <code>rasmlar</code>, <code>ovozli xabarlarni tashla</code>, <code>3 ni tashla</code>
 
 <b>👥 Mijozlar</b>
-• <code>@{u} mijoz qo'sh: Ali, Vali #vip</code> yoki <code>Ali, Vali ni mijozlarga qo'sh</code>
-• Ko'p qatorli: <code>mijozlar qo'sh:</code> keyin har qatorda <code>Ism +99890... #kategoriya | izoh</code>
-• <code>@{u} Ali bilan ishladim narx kelishildi</code>, <code>Valiga qo'ng'iroq qildim</code>, <code>Sardorga taklif yubordim</code>
-• <code>@{u} kimlar qoldi</code> / <code>bu hafta ishlanmaganlar #vip</code> / <code>kimga qo'ng'iroq qilish kerak</code>
-• <code>@{u} bugun kimlar bilan ishladik</code>, <code>mijozlarni ko'rsat</code>, <code>Ali haqida</code>, <code>mijoz 5 o'chir</code>
-• <code>@{u} Ali telefoni +99890...</code>, <code>Ali izoh: ...</code>, <code>Ali ni #vip ga o'tkaz</code>
-• <code>@{u} Ali bilan gaplashdim, 3 kundan keyin qayta qo'ng'iroq</code> — o'zim eslataman
-• <code>@{u} Ali, Vali ni @sardor ga o'tkaz, eslatib tur</code>, <code>#rangor mijozlarini @sardor ga ber</code>
-• <code>@{u} @sardor mijozlari</code>, <code>@sardor ishlanmaganlari</code>, <code>mening mijozlarim</code>
-• Excel/CSV faylni tashlang (izohiga <code>@{u} #rangor @sardor</code>) — hammasini bazaga kiritaman
+• <code>mijoz qo'sh: Ali, Vali #vip</code>; Excel/CSV faylni tashlang — hammasini kiritaman
+• <code>Ali bilan gaplashdim, 3 kundan keyin qayta qo'ng'iroq</code>, <code>Valiga taklif yubordim</code>
+• <code>kimlar qoldi</code>, <code>bu hafta ishlanmaganlar #vip</code>, <code>Ali haqida</code>
+• <code>Ali telefoni +998...</code>, <code>Ali izoh: ...</code>, <code>mijoz 5 o'chir</code>
+• <code>Ali, Vali ni @sardor ga o'tkaz, eslatib tur</code>, <code>@sardor mijozlari</code>
 
-<b>📔 Kundalik va hisobot</b>
-• <code>@{u} kun yakuni</code> / <code>kecha nima qildik</code> / <code>haftalik xulosa</code>
-• <code>@{u} qalay ketyapmiz</code> / <code>statistika</code> / <code>kategoriyalar</code> / <code>excel qilib ber</code>
+<b>🔁 Eslatma va jadval</b>
+• <code>eslat ertaga 9:00 hisobot</code>, <code>har kuni 9 da kassani tekshirish</code>, <code>har dushanba hisobot</code>
+• <code>eslatmalar</code>, <code>takroriylar</code>, <code>kun rejasi</code>, <code>sozlamalar</code>
 
-<b>🔁 Takroriy vazifalar</b>
-• <code>@{u} har kuni 9 da kassani tekshirish</code>, <code>har dushanba hisobot</code>
-• <code>@{u} har ish kuni 18:00 da kassa yopish</code>, <code>har oyning 5-sanasida ijara</code>
-• <code>@{u} takroriylar</code> — ro'yxat va o'chirish
+<b>📔 Hisobot</b>
+• <code>kun yakuni</code>, <code>kecha nima qildik</code>, <code>statistika</code>, <code>kategoriyalar</code>, <code>excel qilib ber</code>
 
-<b>⏰ Eslatmalar va avtomatika</b>
-• <code>@{u} eslat ertaga 9:00 hisobot</code>, <code>hisobotni kechqurun eslat</code>, <code>esimga sol yarim soatdan keyin</code>
-• <code>@{u} eslatmalar</code>, <code>kun rejasi</code>
-• Muddat kelganda o'zim xabar beraman (✅ / +1 soat / ertaga tugmalari bilan)
-• <code>@{u} sozlamalar</code> — ertalabki reja, kechki kundalik, haftalik hisobot
+<b>💬 Reply bilan</b>
+• Zametkamga: <code>bo'ldi</code>, <code>muhim</code>, <code>ertaga sur</code>, <code>tashla</code>
+• Mijoz kartochkasiga: <code>gaplashdim, narx kelishildi</code>
+• Eslatmaga: <code>bo'ldi</code> yoki <code>10 minutdan keyin yana eslat</code>
 
-<b>💬 Reply bilan boshqarish</b>
-• Mening zametka kartochkamga reply: <code>bo'ldi</code>, <code>muhim</code>, <code>ertaga sur</code>, <code>@vali ga ber</code>
-• Mijoz kartochkasiga reply: <code>gaplashdim, narx kelishildi</code>, <code>telefoni +998...</code>
-• Eslatmaga reply: <code>bo'ldi</code> yoki <code>10 minutdan keyin yana eslat</code>
-
-Salom-alik, latifa, motivatsiya, soat va sana — hammasini tushunaman 😊 /help"""
+Salom-alik, latifa, motivatsiya, soat va sana ham tushunaman 😊 /help"""

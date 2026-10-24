@@ -9,10 +9,11 @@ from bot import keyboards as kb
 from bot import texts
 from bot.handlers.actions import (
     PENDING, Reply, done_message, record_work, render_activity, render_card, render_clients, render_notes,
+    send_note_file,
 )
 from bot.phrases import say
-from bot.handlers.files import import_document
-from bot.parser import ClientInput, Intent, parse
+from bot.handlers.files import import_document, save_media
+from bot.parser import ClientInput, parse_note
 from bot.services import clients as clients_svc
 from bot.services import notes as notes_svc
 from bot.services import recurring as rec_svc
@@ -242,10 +243,34 @@ async def save_offer(cb: CallbackQuery, session: AsyncSession) -> None:
         except TelegramBadRequest:
             pass
         return
-    intent = parse("zametka: " + pending["text"], local_now())
-    if intent.kind != "note":
-        intent = Intent("note", text=pending["text"])
+    if "media" in pending:
+        reply = await save_media(session, cb.message.chat.id, pending["media"], pending["caption"], cb.from_user.id,
+                                 who(cb), first(cb))
+        await cb.answer("📎 Saqlandi")
+        await edit(cb, reply)
+        return
+    intent = parse_note(pending["text"], local_now())
     note = await notes_svc.add_note(session, cb.message.chat.id, intent.text, cb.from_user.id, who(cb),
                                     intent.category, intent.important, intent.when, intent.assignee)
     await cb.answer("📝 Saqlandi")
     await edit(cb, Reply(texts.note_saved(note, say("note_saved", first(cb))), kb.note_saved(note)))
+
+
+@router.callback_query(F.data.startswith("nf:"))
+async def send_file(cb: CallbackQuery, session: AsyncSession) -> None:
+    num = int(cb.data.split(":")[1])
+    note = (await notes_svc.get_notes(session, cb.message.chat.id, [num])).get(num)
+    if not note or not note.file_id:
+        await cb.answer("Fayl topilmadi", show_alert=True)
+        return
+    await cb.answer("📤")
+    await send_note_file(cb.bot, cb.message.chat.id, note, reply_to=cb.message.message_id)
+
+
+@router.callback_query(F.data.startswith("fs:"))
+async def send_all_files(cb: CallbackQuery, session: AsyncSession) -> None:
+    cat, ftype = cb.data.split(":", 1)[1].split(".", 1)
+    notes, _ = await notes_svc.list_files(session, cb.message.chat.id, cat or None, ftype or None, limit=10)
+    await cb.answer(f"📤 {len(notes)} ta")
+    for n in reversed(notes):
+        await send_note_file(cb.bot, cb.message.chat.id, n)

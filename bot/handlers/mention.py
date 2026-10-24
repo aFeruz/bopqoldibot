@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot import keyboards as kb
 from bot.handlers.actions import PENDING, execute, send
 from bot.handlers.context import apply_context, reply_context
+from bot.media import extract_media
 from bot.phrases import say
-from bot.parser import Intent, parse
+from bot.parser import parse, parse_note
 from bot.services.common import local_now
 
 router = Router()
@@ -50,17 +51,17 @@ async def on_message(msg: Message, session: AsyncSession, bot_username: str, bot
     if not (private or mentioned or reply_to_bot):
         return
 
-    if reply and reply.document and (mentioned or private):
-        from bot.handlers.files import import_from_reply  # files.py mention.py ni import qiladi
-        if await import_from_reply(msg, session, msg.bot, text):
-            return
+    if reply and not reply_to_bot and (mentioned or private) and extract_media(reply):
+        # media xabarga reply: bo'sh yoki "eslab qol #kat" — saqlash; jadval — import; boshqa buyruq — odatdagidek
+        from bot.handlers.files import SAVE_RE, IMPORT_RE, media_from_reply  # files.py mention.py ni import qiladi
+        if not text or SAVE_RE.search(text) or IMPORT_RE.search(text) or parse(text, local_now()).kind == "note":
+            if await media_from_reply(msg, session, msg.bot, text):
+                return
 
     reply_text = (reply.text or reply.caption or "") if reply and not reply_to_bot else ""
     if not text and reply_text:
         # reply + @bot — o'sha xabarni zametka qilamiz
-        intent = parse("zametka: " + reply_text, local_now())
-        if intent.kind != "note":
-            intent = Intent("note", text=reply_text)
+        intent = parse_note(reply_text, local_now())
     else:
         if reply_text and _PREFIX_ONLY.match(text):
             text = text.rstrip(":") + ":\n" + reply_text
@@ -85,12 +86,11 @@ async def on_message(msg: Message, session: AsyncSession, bot_username: str, bot
     await send(msg, replies)
 
 
-@router.message(F.sticker | F.voice | F.video_note | F.audio)
+@router.message(F.sticker)
 async def on_media(msg: Message, bot_id: int) -> None:
-    """Botga stiker yoki ovoz bilan javob berilsa ham jim qolmaymiz."""
+    """Botga stiker bilan javob berilsa ham jim qolmaymiz (ovoz/rasm — files.py da saqlash taklifi)."""
     reply = msg.reply_to_message
     to_bot = bool(reply and reply.from_user and reply.from_user.id == bot_id)
     if not (to_bot or msg.chat.type == ChatType.PRIVATE):
         return
-    key = "sticker" if msg.sticker else "voice"
-    await msg.reply(say(key, msg.from_user.first_name if msg.from_user else None))
+    await msg.reply(say("sticker", msg.from_user.first_name if msg.from_user else None))

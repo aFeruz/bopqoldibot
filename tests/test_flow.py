@@ -24,6 +24,8 @@ class FakeMsg:
         self.chat = SimpleNamespace(id=CHAT, type="supergroup")
         self.from_user = SimpleNamespace(id=1, full_name=name, first_name=name, username=username)
         self.documents = []
+        self.message_id = 1
+        self.bot = None
 
     async def answer_document(self, doc):
         self.documents.append(doc)
@@ -206,3 +208,8 @@ async def test_smalltalk_prefix(session):
     assert "Jami ochiq ishlar: <b>1</b>" in out
     out, *_ = await say(session, "yaxshi")
     assert any(p in out for p in all_phrases("fine"))
+
+
+def test_help_fits_telegram_limit():
+    from bot.texts import HELP
+    assert len(HELP.format(u="a" * 32)) < 4096

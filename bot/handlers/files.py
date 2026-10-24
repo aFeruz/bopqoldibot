@@ -1,6 +1,7 @@
 """Excel/CSV fayllarni qabul qilib, mijozlar bazasiga import qilish."""
 
 import logging
+import re
 import secrets
 
 from aiogram import Bot, F, Router
@@ -12,7 +13,9 @@ from bot import keyboards as kb
 from bot import texts
 from bot.handlers.actions import PENDING, Reply, first_name, send
 from bot.handlers.mention import strip_mention
-from bot.parser import extract_assignees, extract_tags, split_instructions
+from bot.media import Media, describe, extract_media
+from bot.parser import extract_assignees, extract_tags, normalize, parse_note, split_instructions
+from bot.services import notes as notes_svc
 from bot.phrases import say
 from bot.services import clients as clients_svc
 from bot.services import reminders as rem_svc
@@ -68,13 +71,27 @@ async def import_document(
     return Reply(texts.clip(text), kb.import_done(batch) if added else None)
 
 
-@router.message(F.document)
-async def on_document(msg: Message, session: AsyncSession, bot: Bot, bot_username: str, bot_id: int) -> None:
+SAVE_RE = re.compile(r"\b(?:eslab qol|saqla|saqlab|esda tut|yozib qo'y|yozib qoy|zametka|eslatma qil)\w*", re.IGNORECASE)
+IMPORT_RE = re.compile(r"\b(?:kirit|import|bazaga|mijoz)\w*", re.IGNORECASE)
+
+
+async def save_media(
+    session: AsyncSession, chat_id: int, media: Media, caption: str, author_id: int | None, who: str,
+    user: str | None, fallback_text: str = "",
+) -> Reply:
+    """Media xabarni zametka sifatida saqlaydi: izohdan kategoriya, mas'ul, muddat va matn olinadi."""
+    caption = (caption or "").strip()
+    intent = parse_note(caption, local_now())
+    text = intent.text or normalize(fallback_text).strip() or describe(media.type, media.name, media.duration)
+    note = await notes_svc.add_note(
+        session, chat_id, text, author_id, who, intent.category, intent.important, intent.when, intent.assignee,
+        file_id=media.file_id, file_type=media.type, file_name=media.name,
+    )
+    return Reply(texts.note_saved(note, say("file_saved", user)), kb.note_saved(note))
+
+
+async def _table(msg: Message, session: AsyncSession, bot: Bot, caption: str, mentioned: bool, private: bool) -> None:
     doc = msg.document
-    if not is_table(doc):
-        return
-    caption, mentioned = strip_mention(msg, bot_username, bot_id)
-    private = msg.chat.type == ChatType.PRIVATE
     if doc.file_size and doc.file_size > MAX_SIZE:
         if private or mentioned:
             await msg.reply("Fayl juda katta (10 MB dan oshmasin)")
@@ -88,6 +105,41 @@ async def on_document(msg: Message, session: AsyncSession, bot: Bot, bot_usernam
     token = secrets.token_hex(4)
     PENDING[token] = {"file_id": doc.file_id, "file_name": doc.file_name, "caption": caption}
     await msg.reply(say("import_offer", first_name(msg)), reply_markup=kb.import_offer(token))
+
+
+@router.message(F.photo | F.video | F.voice | F.audio | F.document | F.video_note | F.animation)
+async def on_media_message(msg: Message, session: AsyncSession, bot: Bot, bot_username: str, bot_id: int) -> None:
+    caption, mentioned = strip_mention(msg, bot_username, bot_id)
+    private = msg.chat.type == ChatType.PRIVATE
+    if is_table(msg.document) and not SAVE_RE.search(caption):
+        await _table(msg, session, bot, caption, mentioned, private)
+        return
+    media = extract_media(msg)
+    user = first_name(msg)
+    if private or mentioned:
+        reply = await save_media(session, msg.chat.id, media, caption, msg.from_user.id, msg.from_user.full_name, user)
+        await send(msg, [reply])
+        return
+    reply_to = msg.reply_to_message
+    if reply_to and reply_to.from_user and reply_to.from_user.id == bot_id:
+        # botga ovoz/rasm bilan javob — jim qolmaymiz, saqlashni taklif qilamiz
+        token = secrets.token_hex(4)
+        PENDING[token] = {"media": media, "caption": caption}
+        await msg.reply(say("media_offer", user), reply_markup=kb.save_offer(token))
+
+
+async def media_from_reply(msg: Message, session: AsyncSession, bot: Bot, text: str) -> bool:
+    """Guruhdagi media xabarga reply: "@bot eslab qol #shartnoma" — saqlaydi, jadval bo'lsa import qiladi."""
+    reply = msg.reply_to_message
+    media = extract_media(reply)
+    if not media:
+        return False
+    if is_table(reply.document) and not SAVE_RE.search(text):
+        return await import_from_reply(msg, session, bot, text)
+    result = await save_media(session, msg.chat.id, media, text, msg.from_user.id, msg.from_user.full_name,
+                              first_name(msg), fallback_text=reply.caption or "")
+    await send(msg, [result])
+    return True
 
 
 async def import_from_reply(msg: Message, session: AsyncSession, bot: Bot, text: str) -> bool:

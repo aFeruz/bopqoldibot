@@ -40,6 +40,8 @@ vaqtni ("yarim soatdan keyin", "ertaga kechqurun") va xatolik bilan yozilgan ism
 - Qayta ochish, tahrirlash, o'chirish, kategoriyaga ko'chirish, muddatni surish, mas'ul biriktirish
 - Ro'yxatlar: ochiq, bajarilgan, bugungi, ertangi, muhim, muddati o'tgan, kategoriya va mas'ul bo'yicha
 - Matn bo'yicha qidiruv
+- Rasm, ovozli xabar, video, audio, video-xabar va fayllarni zametka sifatida saqlash (kategoriya, mas'ul,
+  izoh bilan) va keyin kategoriya yoki turi bo'yicha qayta yuborish
 
 **Mijozlar**
 
@@ -192,6 +194,20 @@ Quyidagi misollarda bot tag qilingan deb hisoblanadi (`@bopqoldibot ...`). To'li
 | `tovarni qidir` | Qidiruv |
 | boshqa xabarga reply qilib `@bopqoldibot` | O'sha xabar zametka sifatida saqlanadi |
 
+### Fayllar
+
+| Xabar | Natija |
+|---|---|
+| media xabarga reply qilib `@bopqoldibot eslab qol #shartnoma` | Fayl zametka sifatida saqlanadi |
+| izohi `@bopqoldibot #shartnoma imzolangan nusxa` bo'lgan rasm yoki fayl | Shu izoh bilan saqlanadi |
+| `#shartnoma fayllari`, `rasmlar`, `ovozli xabarlar`, `hujjatlar` | Ro'yxat va yuklab olish tugmalari |
+| `fayllarni tashla #shartnoma`, `ovozli xabarlarni tashla` | Fayllarning o'zi yuboriladi (oxirgi 10 ta) |
+| `3 ni tashla`, bot yuborgan faylga reply qilib `o'chir` | Bitta faylni olish yoki boshqarish |
+
+Bot fayllarni yuklab olmaydi va serverda saqlamaydi: Telegram bergan `file_id` saqlanadi va fayl shu
+identifikator orqali qayta yuboriladi. Jadval fayllari (`.xlsx`, `.csv`) odatda import qilinadi; izohda
+`saqla` yoki `eslab qol` bo'lsa, oddiy fayl sifatida saqlanadi.
+
 ### Mijozlar
 
 | Xabar | Natija |
@@ -318,11 +334,12 @@ bot/
   texts.py             xabarlarni formatlash
   keyboards.py         inline tugmalar
   jobs.py              fon vazifalari
+  media.py             media turini aniqlash, tavsiflash va qayta yuborish
   handlers/
     mention.py         mention va reply'larni aniqlash
     commands.py        slash buyruqlar
     callbacks.py       inline tugmalar bosilishi
-    files.py           Excel/CSV fayllarni qabul qilish
+    files.py           media va fayllarni qabul qilish: saqlash yoki jadval importi
     actions.py         Intent ni bajarish (barcha kirish yo'llari uchun umumiy)
     context.py         bot xabariga reply: zametka / mijoz / eslatma kontekstini aniqlash
   services/
@@ -340,7 +357,7 @@ tests/                 parser, oqim va fon vazifalari testlari
 
 | Jadval | Mazmuni |
 |---|---|
-| `notes` | Zametkalar: guruh ichidagi raqam, matn, holat, kategoriya, muddat, mas'ul |
+| `notes` | Zametkalar: guruh ichidagi raqam, matn, holat, kategoriya, muddat, mas'ul, biriktirilgan fayl |
 | `clients` | Mijozlar: raqam, ism, telefon, izoh, kategoriya, mas'ul, eslatish belgisi, import partiyasi |
 | `interactions` | Mijozlar bilan aloqalar tarixi |
 | `categories` | Guruh kategoriyalari (zametka va mijozlar uchun umumiy) |

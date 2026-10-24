@@ -8,6 +8,7 @@ from aiogram.types import Chat, Message, User
 
 from bot.db import init_db
 from bot.handlers.context import apply_context, reply_context
+from bot.handlers.files import on_media_message
 from bot.handlers.mention import on_media, on_message
 from bot.parser import parse
 
@@ -177,9 +178,11 @@ async def test_sticker_and_voice_reply():
                "is_animated": False, "is_video": False}
     voice = {"file_id": "v", "file_unique_id": "v", "duration": 1}
     with patch.object(Message, "reply", fake_reply):
-        for extra in ({"sticker": sticker}, {"voice": voice}):
-            m = Message(message_id=2, date=NOW, chat=CHAT, from_user=ME, reply_to_message=bot_msg, **extra)
-            await on_media(m, 42)
+        m = Message(message_id=2, date=NOW, chat=CHAT, from_user=ME, reply_to_message=bot_msg, sticker=sticker)
+        await on_media(m, 42)
+        # ovoz bilan botga javob — saqlash taklifi (files.py)
+        m = Message(message_id=4, date=NOW, chat=CHAT, from_user=ME, reply_to_message=bot_msg, voice=voice)
+        await on_media_message(m, None, None, "kimedibubot", 42)
         # botga emas — jim
         m = Message(message_id=3, date=NOW, chat=CHAT, from_user=ME, sticker=sticker)
         await on_media(m, 42)

@@ -428,6 +428,21 @@ POOL: dict[str, list[str]] = {
         "Tushunmadim 🤔 Zametka sifatida saqlab qo'yaymi, {a}?",
         "Bu yangi ishmi, {a}? Yozib qo'yaymi? 📝",
     ],
+    "file_saved": [
+        "Faylni saqlab qo'ydim, {a}! 📎",
+        "Arxivga tushdi, {a} 🗂 Kerak bo'lsa darhol topib beraman",
+        "Saqladim, {a}! Endi bu fayl yo'qolmaydi 💾",
+        "Qabul qildim, {a} 📥 Istalgan payt so'rang",
+        "Joyiga qo'ydim, {a} 🗃",
+    ],
+    "media_offer": [
+        "Buni saqlab qo'yaymi, {a}? 📎",
+        "Faylni kundalikka qo'shib qo'yaymi, {a}? 🗂",
+    ],
+    "files_head": ["Mana fayllar, {a} 🗂", "Arxivdan topdim, {a} 📎", "Marhamat, {a} 👇"],
+    "files_empty": ["Hali saqlangan fayl yo'q, {a} 🤷", "Bunday fayl topilmadi, {a} 🔍"],
+    "files_sent": ["{n} ta faylni yubordim, {a} 📤", "Mana, {a}, {n} ta fayl 👆", "Yetkazildi, {a}: {n} ta 📬"],
+    "no_file": ["Bu zametkada fayl yo'q, {a} 🤷 Mana o'zi:", "Faylsiz zametka ekan, {a} 👇"],
     "labbay": [
         "Labbay, {a}? 👂",
         "Shu yerdaman, {a}! Nima qilamiz? 🙂",

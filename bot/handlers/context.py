@@ -15,7 +15,7 @@ NOTE_MARK_RE = re.compile(r"(?:📌|✅|🔄|❗|▫️|✏️|🔥)\s*(?:<[^>]+
 CLIENT_MARK_RE = re.compile(r"👤\s*(?:<[^>]+>)*#(\d+)")
 REMINDER_RE = re.compile(r"^(?:⏰|🔔).*\n\n🔔 (.+?)(?:\n|$)", re.DOTALL)
 
-NOTE_KINDS = {"done", "undo", "delete", "edit", "note_update"}
+NOTE_KINDS = {"done", "undo", "delete", "edit", "note_update", "send_file"}
 CLIENT_KINDS = {"worked", "client_update", "client_assign", "client_archive"}
 SNOOZE_RE = re.compile(r"\b(keyinroq|keyin|yana eslat\w*|qayta eslat\w*|eslat\w*|kechiktir\w*|sur\w*)\b", re.IGNORECASE)
 DONE_ACK_RE = re.compile(

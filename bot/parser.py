@@ -454,12 +454,12 @@ SHOW_VERB = r"\b(ko'rsat\w*|korsat\w*|ber|bering|chiqar\w*|tashla|qani|qaysi|nim
 
 NOTE_PREFIX = re.compile(
     r"^(?:zametka(?:ga)?(?: qil)?|yoz(?:ib qo'y|ib qoy|ib ol|ib qo'ying)?|qayd et|qo'sh(?:ib qo'y)?|"
-    r"eslab qol|esda tut|note|zapishi|\+)\b\s*[:\-]?\s*|^\+\s*",
+    r"eslab qol|esda tut|saqla(?:b qo'y|b qol)?|note|zapishi|\+)\b\s*[:\-]?\s*|^\+\s*",
     re.IGNORECASE,
 )
 NOTE_SUFFIX = re.compile(
     r"\s*(?:deb\s+)?(?:yozib qo'y\w*|yozib qoy|yozib ol\w*|zametka qil\w*|qayd et\w*|eslab qol\w*|"
-    r"esda tut|yozvol|yozib qo'yasanmi)\s*[.!]*$",
+    r"esda tut|yozvol|yozib qo'yasanmi|saqla\w*|saqlab qo'y\w*|saqlab qol\w*)\s*[.!]*$",
     re.IGNORECASE,
 )
 REMIND_HEAD = re.compile(
@@ -570,6 +570,38 @@ def parse_recurring(text: str, now: datetime) -> Intent | None:
         return None
     return Intent("recurring_add", text=body, rule=rule, when=datetime(2000, 1, 1, hour, minute),
                   category=tags[0] if tags else None, assignee=assignee, important=important)
+
+
+FILE_WORDS = (
+    r"(?:fayl|fail|file|rasm|surat|foto|photo|skrinshot|ovozli|ovoz|audio|golos|video|hujjat|dokument|media)\w*"
+)
+FILE_TYPE_WORDS = [
+    ("photo", r"rasm|surat|foto|photo|skrinshot"),
+    ("voice", r"ovoz|audio|golos"),
+    ("video", r"video"),
+    ("document", r"hujjat|dokument"),
+]
+SEND_VERB = r"(?:tashla|yubor|jo'nat|ber|chiqar|ko'rsat|tashlab ber|yuborib ber)\w*"
+
+
+def _file_type(text: str) -> str | None:
+    for kind, rx in FILE_TYPE_WORDS:
+        if re.search(rf"\b(?:{rx})", text):
+            return kind
+    return None
+
+
+def _files_intent(low: str, text: str) -> Intent | None:
+    """'#shartnoma fayllari', 'rasmlarni ko'rsat', 'ovozli xabarlarni tashla', 'fayllarni tashla #kassa'."""
+    body = TAG_RE.sub("", low).strip()
+    m = re.fullmatch(
+        rf"(?:barcha |hamma |oxirgi )?({FILE_WORDS})(?:\s+(?:xabar|fayl)\w*)?\s*(?:ni|larni)?\s*({SEND_VERB}|qani|bormi|ro'yxat\w*)?",
+        body,
+    )
+    if not m:
+        return None
+    send = bool(m.group(2)) and not re.match(r"ko'rsat|qani|bormi|ro'yxat", m.group(2))
+    return Intent("files", category=_tag(text), value=_file_type(body), filter="send" if send else None)
 
 
 def _strip_fillers(text: str) -> str:
@@ -862,6 +894,13 @@ def _parse(text: str, now: datetime | None = None) -> Intent:
     if m:
         return Intent("edit", numbers=[int(m.group(1))], text=m.group(2).strip())
 
+    # --- zametka faylini yuborish: "3 ni tashla", "3 faylini yubor" ---
+    m = re.match(
+        rf"^{NUMS}\s*(?:-?ni)?\s*(?:faylini|faylni|rasmini|ovozini|videosini|hujjatini|fayl)?\s*{SEND_VERB}[\s.!]*$", num
+    )
+    if m:
+        return Intent("send_file", numbers=parse_numbers(m.group(1)))
+
     # --- zametkani o'zgartirish: kategoriya / muhim / mas'ul / muddat ---
     nu = _note_update(text, num, now)
     if nu:
@@ -909,6 +948,11 @@ def _parse(text: str, now: datetime | None = None) -> Intent:
     ):
         return Intent("agenda")
 
+    # --- fayllar ---
+    fi = _files_intent(low, text)
+    if fi:
+        return fi
+
     # --- mas'ul bo'yicha ro'yxat: "mening ishlarim", "@ali ishlari" ---
     if re.match(r"^(?:mening|meni|o'zimning|menga tegishli|menga berilgan)\b\s*(?:ish|vazifa|zametka|topshiriq)?\w*", low):
         return Intent("list", status="done" if re.search(r"bajarilgan|qilingan", low) else "open", assignee="me")
@@ -944,10 +988,20 @@ def _parse(text: str, now: datetime | None = None) -> Intent:
         return Intent("done_text", text=re.sub(r"(?:ni|ning)$", "", m.group(1).strip()))
 
     # --- default: yangi zametka ---
-    body = NOTE_SUFFIX.sub("", NOTE_PREFIX.sub("", text)).strip()
+    return parse_note(text, now)
+
+
+def parse_note(text: str, now: datetime | None = None) -> Intent:
+    """Matnni to'g'ridan-to'g'ri zametka sifatida tahlil qiladi (buyruq qidirmasdan).
+
+    "eslab qol #shartnoma ! @ali ertaga imzolash" -> matn, kategoriya, muhimlik, mas'ul, muddat.
+    """
+    now = now or datetime.now()
+    body = NOTE_SUFFIX.sub("", NOTE_PREFIX.sub("", _strip_fillers(normalize(text)))).strip()
     body, important = extract_important(body)
     body, assignee = extract_assignees(body)
     body, tags = extract_tags(body)
+    body = NOTE_SUFFIX.sub("", NOTE_PREFIX.sub("", body)).strip()  # teglar olingach qolgan "eslab qol"
     when, _ = parse_when(body, now)
     return Intent("note", text=body, category=tags[0] if tags else None, important=important, when=when,
                   assignee=assignee)
