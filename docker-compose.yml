@@ -1,0 +1,16 @@
+# Bir nechta muhit (test / prod) uchun:
+#   ENV_FILE=.env.prod DATA_DIR=./data-prod docker compose -p bopqoldibot-prod up -d --build
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: ${ENV_FILE:-.env}
+    environment:
+      DB_PATH: /app/data/bot.db
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

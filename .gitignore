@@ -1,0 +1,86 @@
+# --- Maxfiy sozlamalar ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Ma'lumotlar bazasi va runtime fayllar ---
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backups/
+*.bak
+*.log
+logs/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+develop-eggs/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Virtual muhitlar ---
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# --- Testlar va tahlil vositalari ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.pyre/
+.hypothesis/
+
+# --- IDE va muharrirlar ---
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*~
+.project
+.settings/
+.spyderproject
+.ropeproject
+
+# --- Operatsion tizim ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.directory
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- AI yordamchilar ---
+.claude/
+CLAUDE.local.md
